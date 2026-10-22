@@ -14,7 +14,7 @@ Open in Chrome on Android, then menu, Install app. It then opens full screen fro
    - API restriction: only the two APIs above
 5. Add a budget alert (Billing, Budgets and alerts, choose alerts only). A budget only emails you, it does not stop spending. Google's daily quota for Places text search is fixed at 75,000 and cannot be lowered, so the app has its own daily limit (see below).
 
-Cost. Each Find makes two Google searches (three if you typed a place). The search asks for ratings, hours and extra detail such as dogs welcome, which Google prices in its top Places tier, about 40 US dollars per 1,000 searches after a small free monthly allowance when this was checked in October 2026. Check Google's current pricing page. Maps JavaScript loads are billed separately. For weekend use this should be small, but set the alerts anyway.
+Cost. Each Find makes two Google searches (three if you typed a place). The search asks for ratings, hours and extra detail such as outside seating, which Google prices in its top Places tier, about 40 US dollars per 1,000 searches after a small free monthly allowance when this was checked in October 2026. Check Google's current pricing page. Maps JavaScript loads are billed separately. For weekend use this should be small, but set the alerts anyway.
 
 ## 2. Host it
 

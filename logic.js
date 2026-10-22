@@ -256,8 +256,9 @@
       var closing = ctx.when.mode === 'now' && info.minsLeft != null && info.minsLeft < 45 ? 0.15 : 0;
       var raf = ctx.rafIndex ? matchRaf(ctx.rafIndex, p.formattedAddress, name, ctx.now) : null;
       var rafBoost = raf ? (RAF_WEIGHT[cat.id] || 0) * raf.r : 0;
+      var famBoost = ctx.family && p.goodForChildren ? 0.06 : 0;
       var score = 0.42 * q + 0.2 * near + 0.2 * typeMatch + 0.18 * kw - chain -
-        (info.state === 'unknown' ? 0.08 : 0) - closing + rafBoost;
+        (info.state === 'unknown' ? 0.08 : 0) - closing + rafBoost + famBoost;
 
       out.push({
         id: p.id, place: p, name: name, typeName: typeName, summary: summary,

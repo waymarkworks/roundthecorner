@@ -15,7 +15,7 @@
     'id', 'displayName', 'formattedAddress', 'location', 'rating', 'userRatingCount',
     'regularOpeningHours', 'currentOpeningHours', 'googleMapsUri', 'websiteUri',
     'primaryType', 'primaryTypeDisplayName', 'types', 'priceLevel', 'editorialSummary',
-    'outdoorSeating', 'goodForChildren', 'allowsDogs', 'servesBeer', 'businessStatus'
+    'outdoorSeating', 'goodForChildren', 'servesBeer', 'businessStatus'
   ].map(function (f) { return 'places.' + f; }).join(',');
   var GEO_FIELDS = 'places.location,places.displayName,places.formattedAddress';
   var GPS_LABEL = 'My location';
@@ -171,6 +171,8 @@
     return { mode: 'at', date: L.targetDate(day, $('time').value, now) };
   }
 
+  function whoIsWithMe() { return (document.querySelector('input[name="who"]:checked') || {}).value === 'couple' ? 'couple' : 'family'; }
+
   async function run() {
     if (state.busy) return;
     showErr('');
@@ -178,7 +180,7 @@
     var cat = L.categoryById((document.querySelector('input[name="cat"]:checked') || {}).value);
     var radiusM = parseFloat($('radius').value) * 1609.344;
     var when = currentWhen();
-    store.set('rtc:prefs', JSON.stringify({ cat: cat.id, radius: $('radius').value, day: $('day').value, time: $('time').value }));
+    store.set('rtc:prefs', JSON.stringify({ who: whoIsWithMe(), cat: cat.id, radius: $('radius').value, day: $('day').value, time: $('time').value }));
 
     var typed = $('where').value.trim();
     var needs = cat.queries.length + (typed && !(state.gps && typed === GPS_LABEL) ? 1 : 0);
@@ -198,7 +200,7 @@
       };
       var lists = await Promise.all(cat.queries.map(function (q) { return searchText(body(q), FIELDS); }));
       var all = [].concat.apply([], lists);
-      state.ctx = { cat: cat, center: center, radiusM: radiusM, when: when, rafIndex: L.buildRafIndex(state.raf), now: new Date() };
+      state.ctx = { cat: cat, center: center, radiusM: radiusM, when: when, rafIndex: L.buildRafIndex(state.raf), now: new Date(), family: whoIsWithMe() === 'family' };
       state.label = center.label;
       state.ranked = L.rank(all, state.ctx);
       state.page = 0;
@@ -245,9 +247,8 @@
 
   function tags(p) {
     var t = [];
-    if (p.allowsDogs) t.push('Dogs welcome');
     if (p.outdoorSeating) t.push('Outside seating');
-    if (p.goodForChildren) t.push('Kids OK');
+    if (p.goodForChildren && state.ctx.family) t.push('Kids OK');
     if (p.servesBeer && state.ctx.cat.group === 'Eat') t.push('Serves beer');
     return t;
   }
@@ -437,6 +438,7 @@
   function init() {
     var prefs = {};
     try { prefs = JSON.parse(store.get('rtc:prefs') || '{}') || {}; } catch (e) {}
+    document.querySelector('input[name="who"][value="' + (prefs.who === 'couple' ? 'couple' : 'family') + '"]').checked = true;
     buildCats(prefs.cat || 'micropub');
     if (prefs.radius) $('radius').value = prefs.radius;
     if (prefs.time) $('time').value = prefs.time;
