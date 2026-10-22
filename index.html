@@ -53,6 +53,12 @@
       <button id="install" class="ghost" type="button" hidden>Install app</button>
     </div>
     <p id="keyMsg" class="fine" role="status"></p>
+    <div class="field">
+      <label class="label" for="capInput">Daily search limit</label>
+      <input id="capInput" type="number" inputmode="numeric" min="10" max="1000" step="5">
+      <p class="fine">The app stops asking Google once it has made this many searches today on this phone. Google's own cap cannot be lowered for this API, so this is your safety net.</p>
+      <p id="capNote" class="fine" role="status"></p>
+    </div>
   </section>
 
   <form id="f" class="panel" novalidate>
@@ -101,6 +107,7 @@
 
     <button id="go" class="go" type="submit">Find 3 places</button>
     <p id="formErr" class="err" hidden></p>
+    <p id="usageNote" class="fine"></p>
   </form>
 
   <section id="results" aria-live="polite">

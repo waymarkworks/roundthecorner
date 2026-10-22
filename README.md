@@ -12,7 +12,7 @@ Open in Chrome on Android, then menu, Install app. It then opens full screen fro
 4. Restrict the key:
    - Application restriction: HTTP referrers, set to your site address, for example `https://YOURNAME.github.io/*`
    - API restriction: only the two APIs above
-5. Add a budget alert, and a daily quota cap on Places API (New), so a mistake cannot run up a bill.
+5. Add a budget alert (Billing, Budgets and alerts, choose alerts only). A budget only emails you, it does not stop spending. Google's daily quota for Places text search is fixed at 75,000 and cannot be lowered, so the app has its own daily limit (see below).
 
 Cost. Each Find makes two Google searches (three if you typed a place). The search asks for ratings, hours and extra detail such as dogs welcome, which Google prices in its top Places tier, about 40 US dollars per 1,000 searches after a small free monthly allowance when this was checked in October 2026. Check Google's current pricing page. Maps JavaScript loads are billed separately. For weekend use this should be small, but set the alerts anyway.
 
@@ -28,6 +28,12 @@ GitHub Pages (free):
 Netlify or Cloudflare Pages also work: drag this folder in.
 
 Your key is not in these files. You paste it into the app on your phone (gear icon), and it stays in that browser, so a public repository does not expose it.
+
+## Daily search limit
+
+The app counts every Google search it makes on the phone and refuses to make more once it reaches a daily limit. The default is 80 (a Find uses 2 or 3 searches, so about 30 Finds). Change it in Settings, between 10 and 1000. The count resets at midnight and the current figure shows under the Find button.
+
+It is a guard against a bug or a stuck loop, not a billing control. The count lives in this browser, so clearing site data resets it, and a second device has its own count. The key restrictions in step 4 are what stop anyone else using your key.
 
 ## 3. First run
 

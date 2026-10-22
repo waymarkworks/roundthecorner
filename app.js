@@ -43,8 +43,32 @@
   }
   function showErr(msg) { var e = $('formErr'); e.textContent = msg; e.hidden = !msg; }
 
+  /* ---------- daily search allowance ---------- */
+  // Counts every Google search made from this phone today and refuses to go past the limit.
+  // It is a guard against a bug or a stuck loop, not a billing control: Google's own limit
+  // for this API cannot be lowered, so this is the cap. It resets at local midnight.
+  function getCap() {
+    var raw = store.get('rtc:cap');
+    return raw == null ? L.DEFAULT_CAP : L.clampCap(raw);
+  }
+  function getUsage() { return L.readUsage(store.get('rtc:usage'), new Date()); }
+  function addUsage() { var u = getUsage(); u.n += 1; store.set('rtc:usage', JSON.stringify(u)); return u.n; }
+  function limitError() {
+    var e = new Error('Daily search limit reached (' + getCap() + '). It resets at midnight. You can raise it in Settings.');
+    e.limit = true;
+    return e;
+  }
+  function showUsage() {
+    var u = getUsage(), cap = getCap();
+    var t = 'Searches today: ' + u.n + ' of ' + cap + '. A Find uses 2 or 3.';
+    $('usageNote').textContent = t;
+    $('capNote').textContent = t + ' Resets at midnight.';
+  }
+
   /* ---------- Google calls ---------- */
-  async function searchText(body, mask) {
+  async function searchText(body, mask, opts) {
+    if (!(opts && opts.free) && getUsage().n >= getCap()) throw limitError();
+    addUsage(); showUsage();
     var res = await fetch('https://places.googleapis.com/v1/places:searchText', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': state.key, 'X-Goog-FieldMask': mask },
@@ -61,6 +85,7 @@
   }
 
   function explain(err) {
+    if (err && err.limit) return err.message;
     var s = err && err.status;
     if (s === 400 && /API key/i.test(err.message)) return 'Google rejected the key. Check it was pasted in full.';
     if (s === 403) return 'Google refused the request. Check Places API (New) is enabled for this key and that the key allows this site address. (' + err.message + ')';
@@ -154,6 +179,10 @@
     var radiusM = parseFloat($('radius').value) * 1609.344;
     var when = currentWhen();
     store.set('rtc:prefs', JSON.stringify({ cat: cat.id, radius: $('radius').value, day: $('day').value, time: $('time').value }));
+
+    var typed = $('where').value.trim();
+    var needs = cat.queries.length + (typed && !(state.gps && typed === GPS_LABEL) ? 1 : 0);
+    if (getUsage().n + needs > getCap()) { showErr(limitError().message); return; }
 
     setBusy(true); showSkeleton();
     try {
@@ -376,7 +405,7 @@
     state.key = v; state.mapsPromise = null;
     msg.textContent = 'Testing…';
     try {
-      var r = await searchText({ textQuery: 'pub in York', regionCode: 'GB', pageSize: 1 }, GEO_FIELDS);
+      var r = await searchText({ textQuery: 'pub in York', regionCode: 'GB', pageSize: 1 }, GEO_FIELDS, { free: true });
       store.set('rtc:key', v);
       msg.textContent = r.length ? 'Key works. Saved on this device.' : 'Saved, but the test search returned nothing.';
       $('keyInput').value = '';
@@ -420,6 +449,12 @@
     $('gps').addEventListener('click', function () { showErr(''); useGps(); });
     $('f').addEventListener('submit', function (ev) { ev.preventDefault(); run(); });
     $('settingsBtn').addEventListener('click', function () { openSetup(); });
+    $('capInput').value = getCap();
+    $('capInput').addEventListener('change', function () {
+      var c = L.clampCap($('capInput').value);
+      store.set('rtc:cap', String(c)); $('capInput').value = c; showUsage();
+    });
+    showUsage();
     $('saveKey').addEventListener('click', saveKey);
     $('clearKey').addEventListener('click', function () {
       store.del('rtc:key'); state.key = ''; state.mapsPromise = null;

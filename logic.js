@@ -275,7 +275,27 @@
     return inside.concat(outside).slice(0, 15);
   }
 
+  /* ---------- daily search allowance (a guard against runaway Google spend) ---------- */
+  var DEFAULT_CAP = 80, MIN_CAP = 10, MAX_CAP = 1000;
+  function dayKey(now) {
+    function z(n) { return (n < 10 ? '0' : '') + n; }
+    return now.getFullYear() + '-' + z(now.getMonth() + 1) + '-' + z(now.getDate());
+  }
+  // raw is the stored JSON text; a new day, or anything unreadable, starts at zero.
+  function readUsage(raw, now) {
+    var today = dayKey(now), u = null;
+    try { u = JSON.parse(raw); } catch (e) {}
+    if (u && u.d === today && typeof u.n === 'number' && isFinite(u.n) && u.n >= 0) return { d: today, n: Math.floor(u.n) };
+    return { d: today, n: 0 };
+  }
+  function clampCap(v) {
+    var n = Math.round(Number(v));
+    if (!isFinite(n)) return DEFAULT_CAP;
+    return Math.min(MAX_CAP, Math.max(MIN_CAP, n));
+  }
+
   return {
+    DEFAULT_CAP: DEFAULT_CAP, MIN_CAP: MIN_CAP, MAX_CAP: MAX_CAP, dayKey: dayKey, readUsage: readUsage, clampCap: clampCap,
     CATEGORIES: CATEGORIES, categoryById: categoryById, CHAINS: CHAINS,
     distanceM: distanceM, miles: miles, etaText: etaText,
     openAt: openAt, openInfo: openInfo, targetDate: targetDate, rank: rank,
