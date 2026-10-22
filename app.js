@@ -26,7 +26,8 @@
     gps: null,            // {lat, lng, acc}
     ranked: [], page: 0, ctx: null, label: '',
     mapsPromise: null, map: null, markers: [], youMarker: null, busy: false, installEvt: null,
-    raf: null   // Real Ale Finder list from raf.json, refreshed daily by the GitHub job
+    raf: null,  // Real Ale Finder list from raf.json, refreshed daily by the GitHub job
+    why: store.get('rtc:why') === '1'   // show the score breakdown on each card
   };
 
   /* ---------- small helpers ---------- */
@@ -290,6 +291,8 @@
     tags(p).forEach(function (t) { pills.appendChild(el('span', 'pill', t)); });
     if (pills.childNodes.length) c.appendChild(pills);
 
+    if (state.why) c.appendChild(el('p', 'fine why', L.whyText(o, state.ctx.cat)));
+
     if (o.summary) c.appendChild(el('p', 'summary', o.summary));
 
     var links = el('div', 'links');
@@ -301,7 +304,7 @@
     if (p.googleMapsUri) links.appendChild(link('Open in Maps', p.googleMapsUri));
     if (o.raf) links.appendChild(link('Beer board', o.raf.url));
     if (p.websiteUri) links.appendChild(link('Website', p.websiteUri));
-    if (state.ctx.cat.group === 'Drink') {
+    if (state.ctx.cat.id === 'pub') {
       var q = o.name + ' ' + state.label + ' CAMRA Good Beer Guide';
       links.appendChild(link('CAMRA?', 'https://www.google.com/search?q=' + encodeURIComponent(q)));
     }
@@ -454,7 +457,7 @@
     var prefs = {};
     try { prefs = JSON.parse(store.get('rtc:prefs') || '{}') || {}; } catch (e) {}
     document.querySelector('input[name="who"][value="' + (prefs.who === 'couple' ? 'couple' : 'family') + '"]').checked = true;
-    buildCats(prefs.cat || 'micropub');
+    buildCats(L.categoryById(prefs.cat).id);   // old saved choices (micropub, real ale, craft beer) become Pub
     var mode0 = prefs.mode === 'car' ? 'car' : 'walk';
     document.querySelector('input[name="mode"][value="' + mode0 + '"]').checked = true;
     fillMins(mode0, prefs.mins);
@@ -477,6 +480,12 @@
       store.set('rtc:cap', String(c)); $('capInput').value = c; showUsage();
     });
     showUsage();
+    $('whyToggle').checked = state.why;
+    $('whyToggle').addEventListener('change', function () {
+      state.why = $('whyToggle').checked;
+      store.set('rtc:why', state.why ? '1' : '0');
+      if (state.ctx && state.ranked.length) render();   // redraw any results already on screen
+    });
     $('saveKey').addEventListener('click', saveKey);
     $('clearKey').addEventListener('click', function () {
       store.del('rtc:key'); state.key = ''; state.mapsPromise = null;

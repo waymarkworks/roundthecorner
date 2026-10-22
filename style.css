@@ -155,6 +155,9 @@ button { font: inherit; }
   cursor: pointer;
 }
 .fine { font-size: 13px; color: var(--ink-2); margin: 0; }
+.check { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; cursor: pointer; }
+.check input { width: 20px; height: 20px; margin: 0; flex: none; accent-color: var(--green); }
+.why { overflow-wrap: anywhere; }
 .err {
   margin: 0;
   background: var(--bad-bg);

@@ -14,24 +14,19 @@
   // chain: score penalty for a national chain.
   // hours: false for things that have no opening hours (walks).
   var CATEGORIES = [
-    { id: 'micropub', group: 'Drink', label: 'Micropubs',
-      queries: ['micropub', 'craft beer taproom'],
+    // One Pub choice. Micropubs, real ale and craft beer are preferences that work behind the
+    // scenes: the second query goes looking for them, the keywords and the Real Ale Finder
+    // signal lift them in the ranking, and chains are penalised. Two searches, same as any category.
+    { id: 'pub', group: 'Drink', label: 'Pub',
+      queries: ['pub', 'micropub real ale craft beer taproom'],
       types: ['pub', 'bar', 'brewery', 'brewpub'],
-      keywords: /micro-?\s?pub|taproom|tap room|brewery tap|real ale|cask|craft|ale ?house/i, chain: 0.2 },
-    { id: 'realale', group: 'Drink', label: 'Real ale',
-      queries: ['real ale pub', 'traditional pub cask ale'],
-      types: ['pub', 'bar', 'brewery', 'brewpub'],
-      keywords: /real ale|cask|camra|ale ?house|free house|brewery|\btap\b|micro-?\s?pub/i, chain: 0 },
-    { id: 'craft', group: 'Drink', label: 'Craft beer',
-      queries: ['craft beer bar', 'brewery taproom'],
-      types: ['bar', 'pub', 'brewery', 'brewpub'],
-      keywords: /craft|taproom|tap room|brewery|brewpub|\bipa\b|micro-?\s?pub/i, chain: 0.2 },
-    { id: 'pub', group: 'Drink', label: 'Any pub',
-      queries: ['pub', 'traditional pub'],
-      types: ['pub'], keywords: null, chain: 0.1 },
-    { id: 'wine', group: 'Drink', label: 'Wine or cocktails',
-      queries: ['wine bar', 'cocktail bar'],
-      types: ['bar', 'wine_bar', 'cocktail_bar'], keywords: /wine|cocktail/i, chain: 0.1 },
+      keywords: /micro-?\s?pub|taproom|tap room|brewery tap|real ale|cask|camra|ale ?house|free house|craft|brewery|brewpub|\bipa\b|\btap\b/i, chain: 0.2 },
+    { id: 'wine', group: 'Drink', label: 'Wine',
+      queries: ['wine bar', 'bar serving wine by the glass'],
+      types: ['wine_bar', 'bar'], keywords: /wine|vino|enoteca/i, chain: 0.1 },
+    { id: 'cocktails', group: 'Drink', label: 'Cocktails',
+      queries: ['cocktail bar', 'craft cocktails'],
+      types: ['cocktail_bar', 'bar'], keywords: /cocktail|mixolog|speakeasy/i, chain: 0.1 },
 
     { id: 'pubfood', group: 'Eat', label: 'Pub food',
       queries: ['pub serving food', 'gastropub'],
@@ -62,7 +57,7 @@
 
   // ---- Real Ale Finder list (refreshed daily into raf.json)
   // How much the Real Ale Finder signal counts, by category. Absence is neutral, never a penalty.
-  var RAF_WEIGHT = { micropub: 0.22, realale: 0.26, craft: 0.15, pub: 0.10, pubfood: 0.05, roast: 0.05 };
+  var RAF_WEIGHT = { pub: 0.22, pubfood: 0.05, roast: 0.05 };
   var RAF_STOP = { the: 1, pub: 1, inn: 1, and: 1, of: 1, ltd: 1, limited: 1, bar: 1, club: 1 };
   var RAF_URL = /^https:\/\/www\.realalefinder\.com\/beerboard\/\?[A-Za-z0-9._~%-]+$/;
   // Days since last update implied by the list's label. "week" is somewhere in the last seven days.
@@ -133,7 +128,10 @@
     return m ? m[0].toLowerCase() : null;
   }
 
+  // Categories that were merged into Pub. Phones that saved one of these keep working.
+  var LEGACY_IDS = { micropub: 'pub', realale: 'pub', craft: 'pub' };
   function categoryById(id) {
+    if (Object.prototype.hasOwnProperty.call(LEGACY_IDS, id)) id = LEGACY_IDS[id];
     for (var i = 0; i < CATEGORIES.length; i++) if (CATEGORIES[i].id === id) return CATEGORIES[i];
     return CATEGORIES[0];
   }
@@ -267,19 +265,27 @@
 
       var n = p.userRatingCount || 0, r = p.rating;
       // Pulls a 5.0 from 4 reviews back towards 4.0, so thin ratings do not top the list.
-      var q = r ? clamp(((r * n + 4 * 15) / (n + 15) - 3.2) / 1.8, 0, 1) : 0.3;
+      var smoothed = r ? (r * n + 4 * 15) / (n + 15) : null;
+      var q = r ? clamp((smoothed - 3.2) / 1.8, 0, 1) : 0.3;
       var near = clamp(1 - d / ctx.radiusM, 0, 1);
       var closing = ctx.when.mode === 'now' && info.minsLeft != null && info.minsLeft < 45 ? 0.15 : 0;
       var raf = ctx.rafIndex ? matchRaf(ctx.rafIndex, p.formattedAddress, name, ctx.now) : null;
       var rafBoost = raf ? (RAF_WEIGHT[cat.id] || 0) * raf.r : 0;
       var famBoost = ctx.family && p.goodForChildren ? 0.06 : 0;
-      var score = 0.42 * q + 0.2 * near + 0.2 * typeMatch + 0.18 * kw - chain -
-        (info.state === 'unknown' ? 0.08 : 0) - closing + rafBoost + famBoost;
+      // The score is the sum of these, kept apart so the "why here" line can show them.
+      var parts = {
+        rating: 0.42 * q, near: 0.2 * near, type: 0.2 * typeMatch, kw: 0.18 * kw,
+        chain: -chain, noHours: info.state === 'unknown' ? -0.08 : 0, closing: -closing,
+        raf: rafBoost, family: famBoost
+      };
+      var score = parts.rating + parts.near + parts.type + parts.kw + parts.chain +
+        parts.noHours + parts.closing + parts.raf + parts.family;
 
       out.push({
         id: p.id, place: p, name: name, typeName: typeName, summary: summary,
         dist: d, info: info, keyword: kword,
         typeMatch: typeMatch, kw: kw, chain: isChain, raf: raf, score: score,
+        parts: parts, smoothed: smoothed,
         outside: d > ctx.radiusM, closingSoon: closing > 0
       });
     });
@@ -290,6 +296,29 @@
     var inside = pool.filter(function (o) { return !o.outside; }).sort(byScore);
     var outside = pool.filter(function (o) { return o.outside && o.dist <= ctx.radiusM * 1.6; }).sort(byScore);
     return inside.concat(outside).slice(0, 15);
+  }
+
+  // One plain line saying how a ranked result got its score. Shown when "why here" is switched on.
+  // o is an item from rank(); cat is the category it was ranked under.
+  function whyText(o, cat) {
+    var pt = o.parts, p = o.place, bits = [];
+    function f(x) { return (Math.round(x * 100) / 100).toFixed(2); }
+    function sg(x) { return (x < 0 ? '-' : '+') + f(Math.abs(x)); }
+    var rating = 'rating ' + f(pt.rating);
+    if (!p.rating) rating += ' (not rated yet)';
+    else if (o.smoothed != null && Math.abs(o.smoothed - p.rating) >= 0.05) {
+      var c = p.userRatingCount || 0;
+      rating += ' (' + p.rating.toFixed(1) + ' from ' + c + (c === 1 ? ' review' : ' reviews') + ' counts as ' + o.smoothed.toFixed(1) + ')';
+    }
+    bits.push(rating, 'nearness ' + f(pt.near), 'place type ' + f(pt.type) + (o.typeMatch ? '' : ' (no match)'));
+    if (!cat || cat.keywords) bits.push('keyword ' + f(pt.kw) + (o.kw ? '' : ' (no match)'));
+    if (pt.chain) bits.push('chain ' + sg(pt.chain));
+    if (pt.noHours) bits.push('hours not listed ' + sg(pt.noHours));
+    if (pt.closing) bits.push('closing soon ' + sg(pt.closing));
+    if (pt.raf) bits.push('Real Ale Finder ' + sg(pt.raf));
+    if (pt.family) bits.push('good for children ' + sg(pt.family));
+    return 'Why here (score ' + f(o.score) + '): ' + bits.join(', ') + '.' +
+      (o.outside ? ' Past your limit, so it is listed after places inside it.' : '');
   }
 
   /* ---------- daily search allowance (a guard against runaway Google spend) ---------- */
@@ -316,7 +345,7 @@
     CATEGORIES: CATEGORIES, categoryById: categoryById, CHAINS: CHAINS,
     distanceM: distanceM, miles: miles, etaText: etaText,
     TRAVEL: TRAVEL, radiusFor: radiusFor, etaFor: etaFor, travelOptionLabel: travelOptionLabel,
-    openAt: openAt, openInfo: openInfo, targetDate: targetDate, rank: rank,
+    openAt: openAt, openInfo: openInfo, targetDate: targetDate, rank: rank, whyText: whyText,
     normPostcode: normPostcode, buildRafIndex: buildRafIndex, matchRaf: matchRaf, RAF_WEIGHT: RAF_WEIGHT
   };
 });

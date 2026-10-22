@@ -39,9 +39,11 @@ It is a guard against a bug or a stuck loop, not a billing control. The count li
 
 Open the site, paste the key, tap Save and test. Then tap Use my location, pick a category and tap Find 3 places.
 
+The Drink choices are Pub, Wine and Cocktails. Pub quietly favours micropubs, real ale and craft beer, and marks down national chains. In Settings, "Show why each place ranked where it did" adds a line to each result with its score and the parts that make it up.
+
 ## Real Ale Finder signal (optional)
 
-realalefinder.com publishes a public list of the pubs that use its app, each marked Updated Today, Yesterday or This Week, with a link to the pub's beer board. The app uses that as a ranking signal for the real ale, micropub, craft beer and pub categories. A pub that updated its board recently ranks higher. A pub that is not on the list is not marked down.
+realalefinder.com publishes a public list of the pubs that use its app, each marked Updated Today, Yesterday or This Week, with a link to the pub's beer board. The app uses that as a ranking signal for the Pub category (where it counts most) and, much more lightly, for pub food and Sunday roast. A pub that updated its board recently ranks higher. A pub that is not on the list is not marked down.
 
 How it works:
 - `.github/workflows/refresh-raf.yml` runs once a day on GitHub, reads the list page and saves `raf.json` in your repository.

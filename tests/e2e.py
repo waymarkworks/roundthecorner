@@ -54,6 +54,13 @@ WALKS = [place('w1', 'Pannett Park', 'Park', 'park', ['park'], at(0.002), 4.6, 9
          place('w2', 'Whitby Abbey headland viewpoint', 'Scenic spot', 'tourist_attraction', ['park', 'tourist_attraction'], at(0.004, 0.012), 4.8, 4000, hours=False),
          place('w3', 'Mulgrave Woods', 'Woodland', 'park', ['park'], at(0.02, -0.05), 4.7, 600, hours=False)]
 
+WINE = [place('wn1', 'Vagabond Wines', 'Wine bar', 'wine_bar', ['wine_bar', 'bar'], at(0.0015), 4.9, 40),
+        place('wn2', 'The Cellar Door', 'Wine bar', 'wine_bar', ['wine_bar', 'bar'], at(0.002, 0.001), 4.5, 300),
+        place('wn3', 'Corks & Co', 'Wine bar', 'wine_bar', ['wine_bar'], at(0.003, -0.002), 4.4, 120)]
+COCKTAILS = [place('ck1', 'The Gilded Shaker', 'Cocktail bar', 'cocktail_bar', ['cocktail_bar', 'bar'], at(0.001), 4.6, 500),
+             place('ck2', 'Speakeasy 42', 'Cocktail bar', 'cocktail_bar', ['cocktail_bar', 'bar'], at(-0.0015, 0.002), 4.5, 220),
+             place('ck3', 'Rum & Ginger', 'Bar', 'bar', ['bar'], at(0.0025, -0.001), 4.3, 150)]
+
 GEO = [{'location': {'latitude': C[0], 'longitude': C[1]}, 'displayName': {'text': 'Whitby'}, 'formattedAddress': 'Whitby, UK'}]
 
 calls = []
@@ -80,8 +87,10 @@ def places_handler(route):
                              body=json.dumps({'error': {'code': mode['fail'], 'message': 'Places API (New) has not been used in project 123 before or it is disabled.', 'status': 'PERMISSION_DENIED'}}))
     q = body.get('textQuery', '')
     if body.get('pageSize') == 1: res = GEO
-    elif q == 'micropub': res = PUBS
-    elif q == 'craft beer taproom': res = PUBS2
+    elif q == 'pub': res = PUBS
+    elif q == 'micropub real ale craft beer taproom': res = PUBS2
+    elif q in ('wine bar', 'bar serving wine by the glass'): res = WINE
+    elif q in ('cocktail bar', 'craft cocktails'): res = COCKTAILS
     elif q in ('ice cream', 'gelato'): res = ICE
     elif q in ('country park or nature reserve', 'scenic walk viewpoint'): res = WALKS
     else: res = PUBS
@@ -255,7 +264,7 @@ try:
         check('Shut' not in page.inner_text('#results') and 'Open until' not in page.inner_text('#results'), 'no hours pills on walks')
 
         # H. future time
-        page.check('input[value="realale"]', force=True)
+        page.check('input[value="pub"]', force=True)
         page.select_option('#day', 'sun')
         check(page.is_visible('#timeWrap'), 'time field appears for a day choice')
         page.fill('#time', '12:00')
@@ -269,7 +278,7 @@ try:
         # H2. Real Ale Finder signal
         raf_mode['on'] = True; set_raf()
         page.reload()
-        page.check('input[value="micropub"]', force=True)
+        page.check('input[value="pub"]', force=True)
         page.select_option('#day', 'now')
         page.fill('#where', 'Whitby')
         calls.clear(); page.click('#go'); page.wait_for_selector('.card')
@@ -292,7 +301,7 @@ try:
         # stale snapshot (a week old)
         raf_mode['asof'] = '2026-10-17T04:17:00Z'; set_raf()
         page.reload()
-        page.check('input[value="micropub"]', force=True)
+        page.check('input[value="pub"]', force=True)
         page.fill('#where', 'Whitby'); page.click('#go'); page.wait_for_selector('.card')
         check(page.query_selector('#results .notice') is not None and 'out of date' in page.inner_text('#results .notice'), 'stale list is flagged to the user')
         harbour = page.query_selector('.card:has(h3:text-is("Harbour Tap"))')
@@ -301,11 +310,74 @@ try:
         # file missing again: app must carry on
         raf_mode['on'] = False; set_raf()
         page.reload()
-        page.check('input[value="micropub"]', force=True)
+        page.check('input[value="pub"]', force=True)
         page.fill('#where', 'Whitby'); page.click('#go'); page.wait_for_selector('.card')
         check('Real Ale Finder' not in page.inner_text('#results'), 'missing raf.json is harmless')
+
+        # K. drink choices are Pub, Wine, Cocktails and nothing else
+        groups = page.evaluate("[...document.querySelectorAll('#cats .group-label')].map(g => [g.textContent, [...g.nextElementSibling.querySelectorAll('span')].map(s => s.textContent)])")
+        check(groups[0] == ['Drink', ['Pub', 'Wine', 'Cocktails']], f'Drink choices are Pub, Wine, Cocktails (got {groups[0]})')
+        check(groups[1][0] == 'Eat' and groups[2][0] == 'Out', 'Eat and Out groups unchanged')
+        old = page.evaluate("['micropub','realale','craft'].filter(v => document.querySelector('input[name=cat][value=' + v + ']')).length")
+        check(old == 0, 'no separate micropub, real ale or craft beer buttons')
+        check(page.evaluate("document.querySelector('input[name=cat]:checked').value") == 'pub', 'Pub is the default drink choice')
+
+        # L. phones that saved an old beer category open on Pub
+        for old_id in ('micropub', 'realale', 'craft'):
+            page.evaluate("id => localStorage.setItem('rtc:prefs', JSON.stringify({who:'family', cat:id, mode:'walk', mins:10, day:'now', time:'18:00'}))", old_id)
+            page.reload()
+            check(page.evaluate("document.querySelector('input[name=cat]:checked').value") == 'pub', f'saved {old_id} choice opens as Pub')
+
+        # M. wine and cocktails
+        page.fill('#where', 'Whitby')
+        page.check('input[value="wine"]', force=True)
+        calls.clear(); page.click('#go'); page.wait_for_selector('.card')
+        wn = page.eval_on_selector_all('.card h3', 'els => els.map(e => e.textContent)')
+        print('   wine:', wn)
+        qs = sorted(c['body']['textQuery'] for c in calls if c['body'].get('pageSize') != 1)
+        check(qs == ['bar serving wine by the glass', 'wine bar'], f'wine sends its two wine searches (got {qs})')
+        check(len(calls) == 3, f'geocode plus two searches for wine (got {len(calls)})')
+        check(wn[0] == 'Vagabond Wines' and len(wn) == 3, 'high-rated nearby wine bar ranks first, three shown')
+        check(page.query_selector('a:text("CAMRA?")') is None, 'no CAMRA link on wine')
+        check('Real Ale Finder' not in page.inner_text('#results'), 'no Real Ale Finder note on wine')
+        check('Wine near Whitby' in page.inner_text('.results-head h2'), 'heading says Wine')
+        page.check('input[value="cocktails"]', force=True)
+        calls.clear(); page.click('#go'); page.wait_for_selector('.card')
+        cn = page.eval_on_selector_all('.card h3', 'els => els.map(e => e.textContent)')
+        print('   cocktails:', cn)
+        qs = sorted(c['body']['textQuery'] for c in calls if c['body'].get('pageSize') != 1)
+        check(qs == ['cocktail bar', 'craft cocktails'], f'cocktails sends its two cocktail searches (got {qs})')
+        check(cn[0] == 'The Gilded Shaker' and len(cn) == 3, 'cocktail bar ranks first, three shown')
+        check(page.query_selector('a:text("CAMRA?")') is None, 'no CAMRA link on cocktails')
+        page.check('input[value="pub"]', force=True)
+        calls.clear(); page.click('#go'); page.wait_for_selector('.card')
+        check(page.query_selector('#card-0 a:text("CAMRA?")') is not None, 'CAMRA search link still on Pub results')
+        qs = sorted(c['body']['textQuery'] for c in calls if c['body'].get('pageSize') != 1)
+        check(qs == ['micropub real ale craft beer taproom', 'pub'], f'Pub sends one plain search and one for micropubs, real ale and craft beer (got {qs})')
+
+        # N. "why here" line, off by default, switched on in Settings
+        check(page.query_selector('.why') is None, 'no why-here line by default')
+        page.click('#settingsBtn'); page.wait_for_selector('#setup', state='visible')
+        check(not page.is_checked('#whyToggle'), 'why-here switch is off by default')
+        page.check('#whyToggle')
+        check(len(page.query_selector_all('.card .why')) == 3, 'switching it on adds a line to all three cards at once')
+        w0 = page.inner_text('#card-0 .why')
+        print('   why here:', w0)
+        check(w0.startswith('Why here (score ') and 'rating 0.' in w0 and 'nearness 0.' in w0 and 'place type 0.20' in w0 and 'keyword 0.' in w0, 'why-here line shows the score and its parts')
+        check(page.evaluate("localStorage.getItem('rtc:why')") == '1', 'switch is remembered on the phone')
+        no_hscroll(page, 'results with why-here lines')
+        page.screenshot(path=f'{OUT}/06-why-here.png', full_page=True)
+        page.reload()
+        check(page.evaluate("document.getElementById('whyToggle').checked"), 'switch still on after reload')
+        page.click('#go'); page.wait_for_selector('.card')
+        check(len(page.query_selector_all('.card .why')) == 3, 'new results show the line when the switch is on')
+        page.click('#settingsBtn'); page.wait_for_selector('#setup', state='visible')
+        page.uncheck('#whyToggle')
+        check(page.query_selector('.why') is None and page.evaluate("localStorage.getItem('rtc:why')") == '0', 'switching it off removes the lines')
+        page.click('#settingsBtn')
+
         page.select_option('#day', 'any')
-        page.check('input[value="realale"]', force=True)
+        page.check('input[value="cocktails"]', force=True)
 
         # I. server error surfaced
         mode['fail'] = 403; page.click('#go')
@@ -315,7 +387,7 @@ try:
 
         # J. prefs persisted across reload; SW; manifest
         page.reload()
-        check(page.evaluate("document.querySelector('input[name=cat]:checked').value") == 'realale', 'last category remembered')
+        check(page.evaluate("document.querySelector('input[name=cat]:checked').value") == 'cocktails', 'last category remembered')
         check(page.evaluate("document.getElementById('where').value") == 'Whitby', 'last place remembered')
         check(not page.is_visible('#setup'), 'no setup panel once a key is saved')
         page.wait_for_function("navigator.serviceWorker && navigator.serviceWorker.controller || true")

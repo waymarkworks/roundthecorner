@@ -134,26 +134,39 @@ const ctx = (cat, withRaf) => ({ cat: L.categoryById(cat), center: centre, radiu
 t('rank: a freshly updated Real Ale Finder pub beats an equal pub that is not on it', () => {
   const a = mk('a', 'Plain Pub', 'X, Whitby YO30 1AA, UK');
   const b = mk('b', 'Harbour Tap', 'Quay St, Whitby YO21 3PU, UK');
-  assert.strictEqual(L.rank([a, b], ctx('realale', true))[0].id, 'b');
+  assert.strictEqual(L.rank([a, b], ctx('pub', true))[0].id, 'b');
 });
 t('rank: not being on Real Ale Finder is neutral, not a penalty', () => {
   const a = mk('a', 'Plain Pub', 'X, Whitby YO30 1AA, UK', { rating: 4.8, userRatingCount: 400 });
   const b = mk('b', 'The Harbour', 'Quay St, Whitby YO21 3PU, UK', { rating: 4.0, userRatingCount: 30 });
-  const without = L.rank([a, b], ctx('realale', false)).map(o => o.id);
-  const withRaf = L.rank([a, b], ctx('realale', true)).find(o => o.id === 'a');
+  const without = L.rank([a, b], ctx('pub', false)).map(o => o.id);
+  const withRaf = L.rank([a, b], ctx('pub', true)).find(o => o.id === 'a');
   assert.strictEqual(without[0], 'a');
   assert.strictEqual(withRaf.raf, null);
-  assert.strictEqual(L.rank([a], ctx('realale', true))[0].score, L.rank([a], ctx('realale', false))[0].score);
+  assert.strictEqual(L.rank([a], ctx('pub', true))[0].score, L.rank([a], ctx('pub', false))[0].score);
 });
 t('rank: listed-but-old pub gets only a small lift, well below a fresh one', () => {
-  const fresh = L.rank([mk('f', 'The Harbour', 'Quay St, Whitby YO21 3PU, UK')], ctx('realale', true))[0].score;
-  const old = L.rank([mk('o', 'The Corner House', 'Church St, Whitby YO22 4DE, UK')], ctx('realale', true))[0].score;
-  const none = L.rank([mk('n', 'Plain Pub', 'X, Whitby YO30 1AA, UK')], ctx('realale', true))[0].score;
+  const fresh = L.rank([mk('f', 'The Harbour', 'Quay St, Whitby YO21 3PU, UK')], ctx('pub', true))[0].score;
+  const old = L.rank([mk('o', 'The Corner House', 'Church St, Whitby YO22 4DE, UK')], ctx('pub', true))[0].score;
+  const none = L.rank([mk('n', 'Plain Pub', 'X, Whitby YO30 1AA, UK')], ctx('pub', true))[0].score;
   assert(fresh - none > 0.2 && old - none < 0.07 && old - none > 0, [fresh - none, old - none].join(' '));
 });
 t('rank: categories that are not about beer ignore the signal', () => {
   const b = mk('b', 'Harbour Tap', 'Quay St, Whitby YO21 3PU, UK', { primaryType: 'restaurant', types: ['restaurant'] });
   assert.strictEqual(L.rank([b], ctx('dinner', true))[0].score, L.rank([b], ctx('dinner', false))[0].score);
+});
+t('rank: wine and cocktails ignore the signal', () => {
+  const b = mk('b', 'Harbour Tap', 'Quay St, Whitby YO21 3PU, UK', { primaryType: 'bar', types: ['bar'] });
+  ['wine', 'cocktails'].forEach(cat => {
+    assert.strictEqual(L.rank([b], ctx(cat, true))[0].score, L.rank([b], ctx(cat, false))[0].score, cat);
+  });
+});
+t('rank: the Real Ale Finder boost is one of the parts and the parts still add up', () => {
+  const o = L.rank([mk('f', 'The Harbour', 'Quay St, Whitby YO21 3PU, UK')], ctx('pub', true))[0];
+  assert(o.parts.raf > 0.2, String(o.parts.raf));
+  const sum = Object.keys(o.parts).reduce((s, k) => s + o.parts[k], 0);
+  assert(Math.abs(sum - o.score) < 1e-12);
+  assert(L.whyText(o, L.categoryById('pub')).indexOf('Real Ale Finder +') > -1);
 });
 
 console.log('\n' + n + ' tests passed');
