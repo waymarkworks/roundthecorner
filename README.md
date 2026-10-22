@@ -71,3 +71,7 @@ Courtesy: the job makes one request a day, says who it is in the request, and th
 - `sw.js`, `manifest.webmanifest`, `icon-*.png`: install and offline shell
 - `raf.json`: the Real Ale Finder list, rewritten daily by the job (starts empty)
 - `scripts/`, `.github/workflows/`: the daily refresh job
+
+## Licence
+
+Copyright (c) 2026 waymarkworks. All rights reserved. See `LICENSE`. The page asks search engines not to list it. That reduces how easily strangers find it, but it does not hide the files from anyone who has the address.
