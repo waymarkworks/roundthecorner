@@ -78,6 +78,15 @@ Courtesy: the job makes one request a day, says who it is in the request, and th
 - `sw.js`, `manifest.webmanifest`, `icon-*.png`: install and offline shell
 - `raf.json`: the Real Ale Finder list, rewritten daily by the job (starts empty)
 - `scripts/`, `.github/workflows/`: the daily refresh job
+- `tests/`: the three test suites above
+
+## Tests
+
+- `node tests/logic.test.js`: ranking, opening hours, travel time, daily limit (no network)
+- `node tests/raf.test.mjs`: the Real Ale Finder list reader and matching
+- `python3 tests/e2e.py`: drives the real page in Chromium with Google mocked. Needs `pip install playwright` and a Chromium. Screenshots go to the system temp folder under `rtc-shots`.
+
+Run all three before pushing a change.
 
 ## Licence
 
