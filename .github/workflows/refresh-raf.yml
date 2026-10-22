@@ -1,0 +1,29 @@
+name: Refresh Real Ale Finder list
+
+on:
+  schedule:
+    - cron: '17 5 * * *'   # once a day, 05:17 UTC
+  workflow_dispatch:        # lets you run it by hand from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Read the public pub list
+        run: node scripts/refresh-raf.mjs
+      - name: Commit raf.json if it changed
+        run: |
+          if [ -n "$(git status --porcelain raf.json)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add raf.json
+            git commit -m "Refresh Real Ale Finder list"
+            git push
+          fi

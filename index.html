@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Round the Corner</title>
+<meta name="description" content="Micropubs, real ale, food, ice cream and walks near wherever you are.">
+<meta name="theme-color" content="#2F5D2B" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1511" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Schibsted+Grotesk:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Round the Corner</h1>
+      <p class="lede">Micropubs, real ale, food and walks near wherever you are this weekend.</p>
+    </div>
+    <button id="settingsBtn" class="icon-btn" type="button" aria-label="Settings" aria-expanded="false" aria-controls="setup">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </header>
+
+  <section id="setup" class="panel" hidden>
+    <h2>Google key</h2>
+    <p class="fine">The app asks Google for places, ratings, hours and the map. It needs your own Google Maps key. The key stays in this phone's browser and is never sent anywhere except Google.</p>
+    <details>
+      <summary>How to get a key</summary>
+      <ol class="steps">
+        <li>In Google Cloud, create a project and switch on billing. Personal use sits inside the free monthly allowance, but add a budget alert.</li>
+        <li>Enable two APIs: <strong>Places API (New)</strong> and <strong>Maps JavaScript API</strong>.</li>
+        <li>Create an API key. Restrict it to those two APIs and to this site's address (HTTP referrers).</li>
+        <li>Paste it below and tap Save and test.</li>
+      </ol>
+    </details>
+    <div class="field">
+      <label class="label" for="keyInput">API key</label>
+      <div class="key-row">
+        <input id="keyInput" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste your key">
+        <button id="showKey" class="ghost" type="button">Show</button>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button id="saveKey" class="go" type="button">Save and test</button>
+      <button id="clearKey" class="ghost" type="button">Remove key</button>
+      <button id="install" class="ghost" type="button" hidden>Install app</button>
+    </div>
+    <p id="keyMsg" class="fine" role="status"></p>
+  </section>
+
+  <form id="f" class="panel" novalidate>
+    <div class="field">
+      <label class="label" for="where">Where</label>
+      <div class="where-row">
+        <input id="where" type="text" autocomplete="off" placeholder="Town, postcode or landmark">
+        <button id="gps" class="ghost" type="button">Use my location</button>
+      </div>
+      <p id="whereNote" class="fine" role="status"></p>
+    </div>
+
+    <fieldset class="field">
+      <legend class="label">What are you after</legend>
+      <div id="cats"></div>
+    </fieldset>
+
+    <div class="row">
+      <div class="field">
+        <label class="label" for="radius">Within</label>
+        <select id="radius">
+          <option value="0.5">Half a mile</option>
+          <option value="1" selected>1 mile</option>
+          <option value="2">2 miles</option>
+          <option value="5">5 miles</option>
+          <option value="10">10 miles</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="label" for="day">Open</label>
+        <select id="day">
+          <option value="now" selected>Now</option>
+          <option value="today">Later today</option>
+          <option value="tomorrow">Tomorrow</option>
+          <option value="fri">Friday</option>
+          <option value="sat">Saturday</option>
+          <option value="sun">Sunday</option>
+          <option value="any">Any time</option>
+        </select>
+      </div>
+    </div>
+    <div class="field" id="timeWrap" hidden>
+      <label class="label" for="time">At what time</label>
+      <input id="time" type="time" value="18:00">
+    </div>
+
+    <button id="go" class="go" type="submit">Find 3 places</button>
+    <p id="formErr" class="err" hidden></p>
+  </form>
+
+  <section id="results" aria-live="polite">
+    <div class="empty" id="empty">
+      <strong>Your three picks appear here</strong>
+      Each one shows:
+      <ul>
+        <li>rating, review count and whether it is open</li>
+        <li>distance and a rough walking or driving time</li>
+        <li>dog, outside seating and kids tags where Google has them</li>
+        <li>a link to directions in Google Maps</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    <span>Place data, ratings and hours come from Google Maps and can lag behind reality. Tap through to Maps to confirm before you set off.</span>
+    <span>Real Ale Finder: where a pub appears on <a href="https://www.realalefinder.com/pubs/" target="_blank" rel="noopener">realalefinder.com</a>, its update status is used as a ranking signal and the card links to its beer board.</span>
+    <span>CAMRA listing: the CAMRA link on a pub card searches the web for that pub's entry. It does not confirm Good Beer Guide status by itself. <a href="https://camra.org.uk/pubs" target="_blank" rel="noopener">CAMRA pub finder</a></span>
+  </footer>
+</div>
+<script src="logic.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
