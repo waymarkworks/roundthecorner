@@ -171,6 +171,19 @@
     return { mode: 'at', date: L.targetDate(day, $('time').value, now) };
   }
 
+  function travelMode() { return (document.querySelector('input[name="mode"]:checked') || {}).value === 'car' ? 'car' : 'walk'; }
+  // Fill the "Within" list for a mode, keeping the old choice when it exists for the new mode.
+  function fillMins(mode, want) {
+    var t = L.TRAVEL[mode], sel = $('mins');
+    sel.textContent = '';
+    t.mins.forEach(function (m) {
+      var o = document.createElement('option');
+      o.value = String(m); o.textContent = L.travelOptionLabel(mode, m);
+      sel.appendChild(o);
+    });
+    sel.value = String(t.mins.indexOf(want) > -1 ? want : t.dflt);
+  }
+
   function whoIsWithMe() { return (document.querySelector('input[name="who"]:checked') || {}).value === 'couple' ? 'couple' : 'family'; }
 
   async function run() {
@@ -178,9 +191,10 @@
     showErr('');
     if (!state.key) { openSetup(true); showErr('Add your Google key in Settings first.'); return; }
     var cat = L.categoryById((document.querySelector('input[name="cat"]:checked') || {}).value);
-    var radiusM = parseFloat($('radius').value) * 1609.344;
+    var mode = travelMode(), mins = parseInt($('mins').value, 10);
+    var radiusM = L.radiusFor(mode, mins);
     var when = currentWhen();
-    store.set('rtc:prefs', JSON.stringify({ who: whoIsWithMe(), cat: cat.id, radius: $('radius').value, day: $('day').value, time: $('time').value }));
+    store.set('rtc:prefs', JSON.stringify({ who: whoIsWithMe(), cat: cat.id, mode: mode, mins: mins, day: $('day').value, time: $('time').value }));
 
     var typed = $('where').value.trim();
     var needs = cat.queries.length + (typed && !(state.gps && typed === GPS_LABEL) ? 1 : 0);
@@ -200,7 +214,7 @@
       };
       var lists = await Promise.all(cat.queries.map(function (q) { return searchText(body(q), FIELDS); }));
       var all = [].concat.apply([], lists);
-      state.ctx = { cat: cat, center: center, radiusM: radiusM, when: when, rafIndex: L.buildRafIndex(state.raf), now: new Date(), family: whoIsWithMe() === 'family' };
+      state.ctx = { cat: cat, center: center, radiusM: radiusM, mode: mode, minsLabel: L.travelOptionLabel(mode, mins), when: when, rafIndex: L.buildRafIndex(state.raf), now: new Date(), family: whoIsWithMe() === 'family' };
       state.label = center.label;
       state.ranked = L.rank(all, state.ctx);
       state.page = 0;
@@ -261,7 +275,7 @@
     var mid = el('div');
     mid.appendChild(el('h3', null, o.name));
     var bits = [o.typeName, PRICE[p.priceLevel]].filter(Boolean);
-    bits.push(L.miles(o.dist) + ' mi, ' + L.etaText(o.dist));
+    bits.push(L.miles(o.dist) + ' mi, ' + L.etaFor(state.ctx.mode, o.dist));
     mid.appendChild(el('p', 'sub', bits.join(' · ')));
     top.appendChild(mid);
     if (p.rating) top.appendChild(el('div', 'rating', '★ ' + p.rating.toFixed(1) + ' (' + (p.userRatingCount || 0) + ')'));
@@ -279,10 +293,11 @@
     if (o.summary) c.appendChild(el('p', 'summary', o.summary));
 
     var links = el('div', 'links');
-    var mode = o.dist <= 2400 ? 'walking' : 'driving';
+    var mode = state.ctx.mode === 'car' ? 'driving' : 'walking';
     var dir = 'https://www.google.com/maps/dir/?api=1&destination=' + p.location.latitude + ',' + p.location.longitude +
       '&destination_place_id=' + encodeURIComponent(p.id) + '&travelmode=' + mode;
-    links.appendChild(link('Directions', dir, 'primary'));
+    links.appendChild(link(state.ctx.mode === 'car' ? 'Drive there' : 'Directions', dir, 'primary'));
+    if (state.ctx.mode === 'car') links.appendChild(link('Bus or train', dir.replace('travelmode=driving', 'travelmode=transit')));
     if (p.googleMapsUri) links.appendChild(link('Open in Maps', p.googleMapsUri));
     if (o.raf) links.appendChild(link('Beer board', o.raf.url));
     if (p.websiteUri) links.appendChild(link('Website', p.websiteUri));
@@ -320,7 +335,7 @@
 
     if (!slice.length) {
       var msg = state.found
-        ? 'Google returned ' + state.found + ' places, but none were open at that time within ' + $('radius').selectedOptions[0].text.toLowerCase() + '. Widen the distance or set Open to Any time.'
+        ? 'Google returned ' + state.found + ' places, but none were open at that time within ' + state.ctx.minsLabel + '. Widen the distance or set Open to Any time.'
         : 'Google found nothing for that search here. Try a bigger distance or a nearby town.';
       r.appendChild(el('p', 'notice', msg));
       return;
@@ -440,7 +455,12 @@
     try { prefs = JSON.parse(store.get('rtc:prefs') || '{}') || {}; } catch (e) {}
     document.querySelector('input[name="who"][value="' + (prefs.who === 'couple' ? 'couple' : 'family') + '"]').checked = true;
     buildCats(prefs.cat || 'micropub');
-    if (prefs.radius) $('radius').value = prefs.radius;
+    var mode0 = prefs.mode === 'car' ? 'car' : 'walk';
+    document.querySelector('input[name="mode"][value="' + mode0 + '"]').checked = true;
+    fillMins(mode0, prefs.mins);
+    document.querySelectorAll('input[name="mode"]').forEach(function (r) {
+      r.addEventListener('change', function () { fillMins(travelMode(), parseInt($('mins').value, 10)); });
+    });
     if (prefs.time) $('time').value = prefs.time;
     var savedWhere = store.get('rtc:where');
     if (savedWhere) $('where').value = savedWhere;

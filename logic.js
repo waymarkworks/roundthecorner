@@ -161,6 +161,22 @@
     return 'about ' + mins + ' min by car';
   }
 
+  // Travel mode and minutes -> straight-line radius, using the same speeds and street padding as etaText,
+  // so a "10 min walk" limit and the time shown on a card agree.
+  var WALK_M_PER_MIN = 80, WALK_PAD = 1.3, CAR_M_PER_MIN = 35000 / 60, CAR_PAD = 1.4;
+  var TRAVEL = {
+    walk: { label: 'On foot', mins: [5, 10, 15, 20, 30], dflt: 10 },
+    car: { label: 'By car or bus', mins: [10, 15, 20, 30, 45], dflt: 20 }
+  };
+  function radiusFor(mode, mins) {
+    return mode === 'car' ? mins * CAR_M_PER_MIN / CAR_PAD : mins * WALK_M_PER_MIN / WALK_PAD;
+  }
+  function etaFor(mode, m) {
+    if (mode === 'car') return 'about ' + Math.max(2, Math.round(m * CAR_PAD / CAR_M_PER_MIN)) + ' min by car';
+    return Math.max(1, Math.round(m * WALK_PAD / WALK_M_PER_MIN)) + ' min walk';
+  }
+  function travelOptionLabel(mode, mins) { return mins + ' min ' + (mode === 'car' ? 'drive' : 'walk'); }
+
   // Is a place open at `date`, from Google's regularOpeningHours.periods?
   // Google days: 0 = Sunday. A period with no close means open all the time.
   function openAt(periods, date) {
@@ -299,6 +315,7 @@
     DEFAULT_CAP: DEFAULT_CAP, MIN_CAP: MIN_CAP, MAX_CAP: MAX_CAP, dayKey: dayKey, readUsage: readUsage, clampCap: clampCap,
     CATEGORIES: CATEGORIES, categoryById: categoryById, CHAINS: CHAINS,
     distanceM: distanceM, miles: miles, etaText: etaText,
+    TRAVEL: TRAVEL, radiusFor: radiusFor, etaFor: etaFor, travelOptionLabel: travelOptionLabel,
     openAt: openAt, openInfo: openInfo, targetDate: targetDate, rank: rank,
     normPostcode: normPostcode, buildRafIndex: buildRafIndex, matchRaf: matchRaf, RAF_WEIGHT: RAF_WEIGHT
   };

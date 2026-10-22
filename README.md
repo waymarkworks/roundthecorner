@@ -64,6 +64,7 @@ Courtesy: the job makes one request a day, says who it is in the request, and th
 
 - Ratings and hours are Google's and can lag. Every card links to Google Maps to confirm.
 - The CAMRA button on pub cards runs a web search for that pub's CAMRA entry. It cannot confirm Good Beer Guide status. CAMRA has no public search link or data feed that this app can use.
+- "Within" is a travel time, not a distance. On foot assumes about 80 metres a minute with a third added for street bends, so 10 minutes reaches about 600 metres in a straight line. By car or bus assumes about 35 km/h with 40 percent added for bends. These are estimates from straight-line distance, not routes: traffic, hills and bus timetables are not known. The Bus or train button opens Google Maps with real public transport times.
 - Walks lists parks, reserves and viewpoints from Google. AllTrails has no open API for this, so the app links to AllTrails for routes. Searching AllTrails for the town gives distance, climb and difficulty.
 - Opening hours for "Later today" and weekday choices use your phone's clock, which is right for UK use.
 - The app stores no Google place data. Only the offline app shell is cached, because Google's terms do not allow caching place content.

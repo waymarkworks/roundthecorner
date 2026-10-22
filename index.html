@@ -84,16 +84,18 @@
       <div id="cats"></div>
     </fieldset>
 
+    <fieldset class="field">
+      <legend class="label">How are you getting there</legend>
+      <div class="chips">
+        <label class="chip"><input type="radio" name="mode" value="walk" checked><span>On foot</span></label>
+        <label class="chip"><input type="radio" name="mode" value="car"><span>By car or bus</span></label>
+      </div>
+    </fieldset>
+
     <div class="row">
       <div class="field">
-        <label class="label" for="radius">Within</label>
-        <select id="radius">
-          <option value="0.5">Half a mile</option>
-          <option value="1" selected>1 mile</option>
-          <option value="2">2 miles</option>
-          <option value="5">5 miles</option>
-          <option value="10">10 miles</option>
-        </select>
+        <label class="label" for="mins">Within</label>
+        <select id="mins"></select>
       </div>
       <div class="field">
         <label class="label" for="day">Open</label>
