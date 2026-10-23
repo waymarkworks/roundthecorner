@@ -352,4 +352,162 @@ t('travel: defaults exist in their own lists and labels read naturally', () => {
   assert.strictEqual(L.travelOptionLabel('car', 30), '30 min drive');
 });
 
+// ---- attractions and the profile
+const ids = o => o.map(x => x.id);
+t('categories: Attractions sits in Out before Walks, has two searches, and uses opening hours', () => {
+  const out = L.CATEGORIES.filter(c => c.group === 'Out');
+  assert.deepStrictEqual(out.map(c => c.id), ['attractions', 'walks']);
+  const a = L.categoryById('attractions');
+  assert.strictEqual(a.queries.length, 2);
+  assert.notStrictEqual(a.hours, false);
+  assert.strictEqual(a.chain, 0);
+  ['tourist_attraction', 'museum', 'zoo', 'castle', 'amusement_park'].forEach(ty => assert(a.types.indexOf(ty) > -1, ty));
+  ['Natural History Museum', 'Chester Zoo', 'Warwick Castle', 'Kew Gardens', 'Sea Life Centre aquarium'].forEach(nm => assert(a.keywords.test(nm), nm));
+  assert(!a.keywords.test('The Crown Inn'));
+});
+t('rank: attractions use opening hours (a shut museum is dropped in now mode)', () => {
+  const mus = (id, over) => mk(id, 'Town Museum ' + id, Object.assign({ primaryType: 'museum', types: ['museum', 'tourist_attraction'], primaryTypeDisplayName: { text: 'Museum' } }, over));
+  const r = L.rank([mus('a'), mus('b', { currentOpeningHours: { openNow: false } })], ctx('attractions'));
+  assert.deepStrictEqual(ids(r), ['a']);
+  assert.strictEqual(r[0].typeMatch, 1);
+  assert.strictEqual(r[0].keyword, 'museum');
+});
+
+t('profile: defaults, and anything unreadable becomes the default', () => {
+  const d = L.defaultProfile();
+  assert.deepStrictEqual(d, { party: 'family', kids: [], vegetarian: false, avoidChains: false, outside: false, budget: 0, love: [], skip: [] });
+  [undefined, null, '', 'not json', '[]', 42, true, '{"party":'].forEach(x => assert.deepStrictEqual(L.normProfile(x), d, String(x)));
+  assert.deepStrictEqual(L.normProfile(JSON.stringify(d)), d);
+});
+t('profile: unknown values are dropped, order is canonical, duplicates collapse', () => {
+  const p = L.normProfile({ party: 'gang', kids: ['12plus', 'toddler', 'under5', 'under5'], love: ['play', 'nonsense', 'animals'], skip: ['history', 'constructor'],
+    vegetarian: 'yes', avoidChains: 1, outside: true, budget: 9 });
+  assert.strictEqual(p.party, 'family');
+  assert.deepStrictEqual(p.kids, ['under5', '12plus']);
+  assert.deepStrictEqual(p.love, ['animals', 'play']);
+  assert.deepStrictEqual(p.skip, ['history']);
+  assert.strictEqual(p.vegetarian, false); assert.strictEqual(p.avoidChains, false); assert.strictEqual(p.outside, true);
+  assert.strictEqual(p.budget, 0);
+});
+t('profile: love wins over skip, a couple keeps no kids ages, budget is 0 to 3', () => {
+  const p = L.normProfile({ party: 'couple', kids: ['under5'], love: ['museums'], skip: ['museums', 'play'] });
+  assert.deepStrictEqual(p.love, ['museums']); assert.deepStrictEqual(p.skip, ['play']); assert.deepStrictEqual(p.kids, []);
+  assert.strictEqual(L.normProfile({ budget: 2 }).budget, 2);
+  assert.strictEqual(L.normProfile({ budget: '3' }).budget, 3);
+  assert.strictEqual(L.normProfile({ budget: 0 }).budget, 0);
+  assert.strictEqual(L.normProfile({ budget: 4 }).budget, 0);
+  assert.strictEqual(L.normProfile({ budget: -1 }).budget, 0);
+  assert.strictEqual(L.normProfile({ budget: 'abc' }).budget, 0);
+});
+
+const attr = (id, name, ty, over) => mk(id, name, Object.assign({ primaryType: ty, types: [ty], primaryTypeDisplayName: { text: name } }, over || {}));
+t('profile: interests match on place type or on words, and do not match by accident', () => {
+  const fits = (interest, place, hay) => L.INTERESTS.find(i => i.id === interest).re.test(hay) ||
+    L.INTERESTS.find(i => i.id === interest).types.some(ty => (place.types || []).indexOf(ty) > -1);
+  assert(fits('animals', { types: ['zoo'] }, 'x'));
+  assert(fits('animals', { types: [] }, 'Willow Farm Park'));
+  assert(!fits('animals', { types: ['bowling_alley'] }, 'Strike Bowling'), 'bowling must not look like owls');
+  assert(fits('play', { types: [] }, 'Strike Bowling'));
+  assert(fits('history', { types: [] }, 'Ruined Abbey'));
+  assert(fits('museums', { types: ['museum'] }, 'x'));
+  assert(fits('transport', { types: [] }, 'Bluebell Steam Railway'));
+  assert(!fits('transport', { types: [] }, 'Constraint Gallery'), 'train must not match inside another word');
+  assert(fits('gardens', { types: ['botanical_garden'] }, 'x'));
+});
+t('profile: loving an interest lifts Attractions that fit it, skipping one lowers them, love wins when both fit', () => {
+  const c = ctx('attractions');
+  const zoo = attr('z', 'Coastal Wildlife Park', 'zoo'), mus = attr('m', 'Maritime Museum', 'museum'), plain = attr('p', 'Viewing Tower', 'tourist_attraction');
+  const run = prof => { const x = Object.assign({}, c, { profile: prof }); const r = L.rank([zoo, mus, plain], x); return id => r.find(o => o.id === id); };
+  const none = run(null);
+  const lov = run({ love: ['animals'], skip: ['museums'] });
+  assert(Math.abs(lov('z').score - none('z').score - 0.08) < 1e-9);
+  assert(Math.abs(lov('m').score - none('m').score + 0.10) < 1e-9);
+  assert(Math.abs(lov('p').score - none('p').score) < 1e-12);
+  assert.strictEqual(lov('z').loved, 'animals');
+  assert.strictEqual(lov('m').loved, null);
+  // a zoo that is also a museum: love wins, no double effect
+  const both = attr('b', 'Zoological Museum', 'museum', { types: ['museum', 'zoo'] });
+  const r2 = L.rank([both], Object.assign({}, c, { profile: { love: ['animals'], skip: ['museums'] } }))[0];
+  assert(Math.abs(r2.parts.profile - 0.08) < 1e-12, String(r2.parts.profile));
+});
+t('profile: interests only count in Attractions', () => {
+  const zooPub = mk('zp', 'Zoo Tap', { primaryType: 'pub', types: ['pub', 'zoo'] });
+  const r = L.rank([zooPub], Object.assign({}, ctx('pub'), { profile: { love: ['animals'] } }))[0];
+  assert.strictEqual(r.parts.profile, 0);
+});
+t('profile: outside seating, vegetarian, chains, budget and kids menu each nudge by their own amount', () => {
+  const W = L.PROFILE_WEIGHT;
+  const eat = id => Object.assign(ctx('pubfood'), { family: true });
+  const base = mk('b', 'The Plain Inn', { menuForChildren: false });
+  const withProf = (over, prof, c) => L.rank([mk('x', over.name || 'The Plain Inn', over)], Object.assign({}, c || eat(), { profile: prof }))[0];
+  assert(Math.abs(withProf({ outdoorSeating: true }, { outside: true }).parts.profile - W.outside) < 1e-12);
+  assert.strictEqual(withProf({ outdoorSeating: false }, { outside: true }).parts.profile, 0, 'a no, or a blank, says nothing');
+  assert.strictEqual(withProf({}, { outside: true }).parts.profile, 0);
+  assert(Math.abs(withProf({ servesVegetarianFood: true }, { vegetarian: true }).parts.profile - W.vegetarian) < 1e-12);
+  assert.strictEqual(withProf({ servesVegetarianFood: true }, { vegetarian: true }, ctx('pub')).parts.profile, 0, 'vegetarian counts when eating, not when drinking');
+  assert.strictEqual(withProf({ servesVegetarianFood: false }, { vegetarian: true }).parts.profile, 0);
+  assert(Math.abs(withProf({ name: 'The Moon Under Water (Wetherspoon)' }, { avoidChains: true }).parts.profile - W.chain) < 1e-12);
+  assert.strictEqual(withProf({ name: 'The Moon Under Water (Wetherspoon)' }, { avoidChains: false }).parts.profile, 0);
+  assert(Math.abs(withProf({ priceLevel: 'PRICE_LEVEL_EXPENSIVE' }, { budget: 2 }).parts.profile - W.overBudget) < 1e-12);
+  assert.strictEqual(withProf({ priceLevel: 'PRICE_LEVEL_MODERATE' }, { budget: 2 }).parts.profile, 0, 'at budget is fine');
+  assert.strictEqual(withProf({}, { budget: 1 }).parts.profile, 0, 'unknown price says nothing');
+  assert.strictEqual(withProf({ priceLevel: 'PRICE_LEVEL_VERY_EXPENSIVE' }, { budget: 0 }).parts.profile, 0, 'no budget set means no nudge');
+  assert(Math.abs(withProf({ menuForChildren: true }, { kids: ['under5'] }).parts.profile - W.kidsMenu) < 1e-12);
+  assert(Math.abs(withProf({ menuForChildren: true }, { kids: ['5to11'] }).parts.profile - W.kidsMenu) < 1e-12);
+  assert.strictEqual(withProf({ menuForChildren: true }, { kids: ['12plus'] }).parts.profile, 0, 'teenagers do not need a kids menu');
+  assert.strictEqual(withProf({ menuForChildren: true }, { kids: ['under5'] }, ctx('pubfood')).parts.profile, 0, 'couple mode ignores the kids menu');
+});
+t('profile: effects add up and every nudge is small next to the rating part', () => {
+  const W = L.PROFILE_WEIGHT;
+  Object.keys(W).forEach(k => assert(Math.abs(W[k]) <= 0.10, k));
+  const c = Object.assign(ctx('pubfood'), { family: true, profile: { kids: ['under5'], vegetarian: true, outside: true, avoidChains: true, budget: 1 } });
+  const r = L.rank([mk('a', 'Greene King Plain Inn', { outdoorSeating: true, servesVegetarianFood: true, menuForChildren: true, priceLevel: 'PRICE_LEVEL_EXPENSIVE' })], c)[0];
+  assert(Math.abs(r.parts.profile - (W.outside + W.vegetarian + W.chain + W.overBudget + W.kidsMenu)) < 1e-12, String(r.parts.profile));
+  assert.deepStrictEqual(r.profileNotes, ['outside seating', 'vegetarian options', 'national chain', 'over your budget', 'kids menu']);
+});
+t('profile: the parts still add up to the score, and a profile never removes a place', () => {
+  const items = [attr('z', 'Coastal Wildlife Park', 'zoo'), attr('m', 'Maritime Museum', 'museum'), attr('p', 'Viewing Tower', 'tourist_attraction'), attr('g', 'Walled Gardens', 'garden')];
+  const loud = { party: 'family', kids: ['under5'], love: ['animals'], skip: ['museums', 'gardens', 'history', 'play', 'transport'], vegetarian: true, outside: true, avoidChains: true, budget: 1 };
+  const c = Object.assign(ctx('attractions'), { family: true, profile: loud });
+  const r = L.rank(items, c);
+  assert.strictEqual(r.length, L.rank(items, ctx('attractions')).length);
+  r.forEach(o => {
+    const sum = Object.keys(o.parts).reduce((s, k) => s + o.parts[k], 0);
+    assert(Math.abs(sum - o.score) < 1e-12, o.name);
+  });
+});
+t('profile: a missing, damaged or text profile ranks exactly like no profile', () => {
+  const items = [attr('z', 'Coastal Wildlife Park', 'zoo'), attr('m', 'Maritime Museum', 'museum')];
+  const base = L.rank(items, ctx('attractions')).map(o => o.score);
+  ['{not json', '', null, undefined, '{}'].forEach(p => {
+    const r = L.rank(items, Object.assign(ctx('attractions'), { profile: p }));
+    assert.deepStrictEqual(r.map(o => o.score), base, String(p));
+  });
+});
+t('why here: shows the profile part with its reasons, and nothing when there is none', () => {
+  const c = Object.assign(ctx('attractions'), { profile: { love: ['animals'] } });
+  const zoo = L.rank([attr('z', 'Coastal Wildlife Park', 'zoo')], c)[0];
+  assert(L.whyText(zoo, L.categoryById('attractions')).indexOf('your profile +0.08 (likes animals)') > -1, L.whyText(zoo, L.categoryById('attractions')));
+  const mus = L.rank([attr('m', 'Maritime Museum', 'museum')], Object.assign(ctx('attractions'), { profile: { skip: ['museums'] } }))[0];
+  assert(L.whyText(mus, L.categoryById('attractions')).indexOf('your profile -0.10 (not keen on museums)') > -1);
+  const none = L.rank([attr('z', 'Coastal Wildlife Park', 'zoo')], ctx('attractions'))[0];
+  assert(L.whyText(none, L.categoryById('attractions')).indexOf('your profile') === -1);
+});
+t('profileSummary: reads naturally for a family, a couple and an empty profile', () => {
+  assert.strictEqual(L.profileSummary(null), 'Family with the kids.');
+  assert.strictEqual(L.profileSummary({ party: 'couple' }), 'Just the two of us.');
+  const s = L.profileSummary({ party: 'family', kids: ['under5', '5to11'], vegetarian: true, outside: true, avoidChains: true, budget: 2, love: ['animals', 'history'], skip: ['museums'] });
+  assert.strictEqual(s, 'Family with the kids (under 5, 5 to 11). Vegetarian options, outside seating, avoids national chains, budget up to ££. Likes animals and wildlife, history and castles. Not keen on museums and galleries.');
+  assert.strictEqual(L.profileSummary({ kids: ['12plus'] }), 'Family with the kids (12 and over).');
+});
+t('profile: every interest has an id, a label, a short name and a way to match', () => {
+  const seen = new Set();
+  L.INTERESTS.forEach(i => {
+    assert(i.id && i.label && i.short && i.re instanceof RegExp && Array.isArray(i.types), i.id);
+    assert(!seen.has(i.id)); seen.add(i.id);
+    assert(!i.re.global && !i.re.sticky, i.id + ' must not be a stateful regex');
+  });
+  assert.strictEqual(L.KID_AGES.length, 3);
+});
+
 console.log('\n' + n + ' tests passed');

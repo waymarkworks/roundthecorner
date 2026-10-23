@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Round the Corner</title>
-<meta name="description" content="Micropubs, real ale, food, ice cream and walks near wherever you are.">
+<meta name="description" content="Pubs, food, ice cream, attractions and walks near wherever you are.">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#2F5D2B" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0F1511" media="(prefers-color-scheme: dark)">
@@ -21,7 +21,7 @@
   <header class="top">
     <div>
       <h1>Round the Corner</h1>
-      <p class="lede">Micropubs, real ale, food and walks near wherever you are this weekend.</p>
+      <p class="lede">Pubs, food, attractions and walks near wherever you are this weekend.</p>
     </div>
     <button id="settingsBtn" class="icon-btn" type="button" aria-label="Settings" aria-expanded="false" aria-controls="setup">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
@@ -29,7 +29,13 @@
   </header>
 
   <section id="setup" class="panel" hidden>
-    <h2>Google key</h2>
+    <h2>Settings</h2>
+    <div class="field">
+      <span class="label">Your profile</span>
+      <p id="profileSummary" class="fine"></p>
+      <div class="btn-row"><button id="editProfile" class="ghost" type="button">Edit profile</button></div>
+    </div>
+    <h3 class="sub-h">Google key</h3>
     <p class="fine">The app asks Google for places, ratings, hours and the map. It needs your own Google Maps key. The key stays in this phone's browser and is never sent anywhere except Google.</p>
     <details>
       <summary>How to get a key</summary>
@@ -63,6 +69,58 @@
       <label class="check"><input id="whyToggle" type="checkbox"><span>Show why each place ranked where it did</span></label>
       <p class="fine">Adds a line to each result with its score and the parts that make it up: rating, nearness, place type, keyword and any penalties or boosts.</p>
     </div>
+  </section>
+
+  <section id="profile" class="panel" aria-labelledby="profileTitle" hidden>
+    <h2 id="profileTitle">About you</h2>
+    <p class="fine">Tell the app who is travelling and what you like. It only nudges the order of the results and never hides a place. It stays on this phone, and you can change it any time in Settings.</p>
+
+    <fieldset class="field">
+      <legend class="label">Usually travelling as</legend>
+      <div class="chips">
+        <label class="chip"><input type="radio" name="pparty" value="family" checked><span>Family with the kids</span></label>
+        <label class="chip"><input type="radio" name="pparty" value="couple"><span>Just the two of us</span></label>
+      </div>
+    </fieldset>
+
+    <fieldset class="field" id="pKidsField">
+      <legend class="label">How old are the kids</legend>
+      <div class="chips" id="pKids"></div>
+    </fieldset>
+
+    <fieldset class="field">
+      <legend class="label">Food, drink and places</legend>
+      <div class="check-list">
+        <label class="check"><input id="pVeg" type="checkbox"><span>Vegetarian options matter</span></label>
+        <label class="check"><input id="pChains" type="checkbox"><span>Avoid national chains</span></label>
+        <label class="check"><input id="pOutside" type="checkbox"><span>Outside seating is a plus</span></label>
+      </div>
+    </fieldset>
+
+    <div class="field">
+      <label class="label" for="pBudget">Budget when eating out</label>
+      <select id="pBudget">
+        <option value="0">No preference</option>
+        <option value="1">Up to £</option>
+        <option value="2">Up to ££</option>
+        <option value="3">Up to £££</option>
+      </select>
+    </div>
+
+    <fieldset class="field">
+      <legend class="label">Attractions we love</legend>
+      <div class="chips" id="pLove"></div>
+    </fieldset>
+    <fieldset class="field">
+      <legend class="label">Attractions not for us</legend>
+      <div class="chips" id="pSkip"></div>
+    </fieldset>
+
+    <div class="btn-row">
+      <button id="saveProfile" class="go" type="button">Save profile</button>
+      <button id="cancelProfile" class="ghost" type="button">Skip for now</button>
+    </div>
+    <p id="profileMsg" class="fine" role="status"></p>
   </section>
 
   <form id="f" class="panel" novalidate>

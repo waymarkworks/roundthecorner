@@ -1,6 +1,6 @@
 # Round the Corner
 
-An installable web app for finding micropubs, real ale, craft beer, pubs, food, ice cream and walks near wherever you are. It uses your phone's location (or a town you type), asks Google for places, ratings and opening hours, ranks them, and shows the best three on a map.
+An installable web app for finding micropubs, real ale, craft beer, pubs, food, ice cream, attractions and walks near wherever you are. It uses your phone's location (or a town you type), asks Google for places, ratings and opening hours, ranks them, and shows the best three on a map.
 
 Open in Chrome on Android, then menu, Install app. It then opens full screen from the home screen.
 
@@ -40,6 +40,12 @@ It is a guard against a bug or a stuck loop, not a billing control. The count li
 Open the site, paste the key, tap Save and test. Then tap Use my location, pick a category and tap Find 3 places.
 
 The Drink choices are Pub, Wine and Cocktails. Pub quietly favours micropubs, real ale and craft beer, and marks down national chains. In Settings, "Show why each place ranked where it did" adds a line to each result with its score and the parts that make it up.
+
+## Your profile
+
+On first start the app asks who is travelling (family with kids, or a couple), how old the kids are, whether vegetarian options, outside seating or avoiding national chains matter, a budget for eating out, and which kinds of attraction you love or would skip. Skip it and nothing changes. Change it any time in Settings, under Edit profile.
+
+The profile only nudges the order of results by small amounts and never hides a place, because Google leaves many of these fields blank. It is stored in this browser only. Attractions interests count in the Attractions category; the other choices count everywhere they apply. With "Show why each place ranked where it did" on, a "your profile" part shows the nudge and the reason.
 
 ## Real Ale Finder signal (optional)
 

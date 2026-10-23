@@ -157,6 +157,8 @@ button { font: inherit; }
 .fine { font-size: 13px; color: var(--ink-2); margin: 0; }
 .check { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; cursor: pointer; }
 .check input { width: 20px; height: 20px; margin: 0; flex: none; accent-color: var(--green); }
+.check-list { display: flex; flex-direction: column; gap: 12px; }
+.sub-h { font-size: 16px; margin-top: 4px; }
 .why { overflow-wrap: anywhere; }
 .err {
   margin: 0;

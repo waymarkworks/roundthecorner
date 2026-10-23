@@ -48,6 +48,17 @@
       types: ['ice_cream_shop', 'dessert_shop', 'gelato_shop'],
       keywords: /ice cream|gelato|gelateria|dairy|creamery/i, chain: 0 },
 
+    // Attractions: museums, zoos, castles, gardens, rides. The two searches are a judgment call,
+    // not tested against live Google results. The profile's interests (see INTERESTS) nudge this
+    // category only.
+    { id: 'attractions', group: 'Out', label: 'Attractions',
+      queries: ['tourist attraction', 'museum zoo castle or historic house'],
+      types: ['tourist_attraction', 'museum', 'art_gallery', 'zoo', 'aquarium', 'amusement_park', 'water_park',
+        'historical_landmark', 'historical_place', 'castle', 'cultural_landmark', 'garden', 'botanical_garden',
+        'wildlife_park', 'visitor_center', 'planetarium', 'indoor_playground', 'adventure_sports_center',
+        'miniature_golf_course', 'go_karting_venue'],
+      keywords: /museum|gallery|zoo\b|aquarium|castle|abbey|priory|palace|manor|historic|heritage|gardens?\b|farm park|wildlife|adventure|theme park|soft play|railway|steam|maze|visitor cent|safari|sealife|planetarium/i,
+      chain: 0 },
     { id: 'walks', group: 'Out', label: 'Walks',
       queries: ['country park or nature reserve', 'scenic walk viewpoint'],
       types: ['park', 'national_park', 'hiking_area', 'state_park', 'garden', 'wildlife_park'],
@@ -235,9 +246,118 @@
     return d;
   }
 
+  /* ---------- profile: who is travelling and what they like ---------- */
+  // Everything here nudges the ranking by a small amount. Nothing hides a place, because Google
+  // leaves many of these fields blank and a blank field must never remove a good place.
+  var KID_AGES = [
+    { id: 'under5', label: 'Under 5' },
+    { id: '5to11', label: '5 to 11' },
+    { id: '12plus', label: '12 and over' }
+  ];
+  // Interests apply to Attractions only. A place fits an interest when Google gives it one of the
+  // listed place types, or its name, type label or summary contains one of the words.
+  // The word lists are judgment calls, not tested against live Google results.
+  var INTERESTS = [
+    { id: 'animals', label: 'Animals and wildlife', short: 'animals',
+      types: ['zoo', 'aquarium', 'wildlife_park', 'wildlife_refuge', 'farm'],
+      re: /\b(zoo|aquarium|wildlife|animals?|farm|safari|sealife|aviary|butterfl\w*|falconry|alpacas?|donkeys?)\b/i },
+    { id: 'history', label: 'History and castles', short: 'history',
+      types: ['castle', 'historical_landmark', 'historical_place', 'history_museum', 'cultural_landmark', 'monument'],
+      re: /\b(castle|abbey|priory|palace|manor|fort|roman|medieval|heritage|historic\w*|cathedral|ruins?|tudor)\b/i },
+    { id: 'museums', label: 'Museums and galleries', short: 'museums',
+      types: ['museum', 'art_gallery', 'art_museum', 'history_museum', 'planetarium'],
+      re: /\b(museum|gallery|galleries|exhibition|science cent(er|re)|planetarium)\b/i },
+    { id: 'gardens', label: 'Gardens and nature', short: 'gardens',
+      types: ['garden', 'botanical_garden', 'nature_preserve'],
+      re: /\b(gardens?|arboretum|nature reserve|woodland|orchard|lake)\b/i },
+    { id: 'play', label: 'Rides and play', short: 'rides and play',
+      types: ['amusement_park', 'water_park', 'indoor_playground', 'playground', 'amusement_center', 'go_karting_venue',
+        'miniature_golf_course', 'adventure_sports_center', 'roller_coaster', 'bowling_alley', 'video_arcade'],
+      re: /\b(theme park|adventure|soft play|play ?(area|centre|center|ground|park)|trampoline|bowling|go.?kart\w*|funfair|fairground|miniature golf|crazy golf|splash|climbing|zip ?wire|maze|rides?)\b/i },
+    { id: 'transport', label: 'Trains and transport', short: 'trains and transport',
+      types: [],
+      re: /\b(railway|steam|train|locomotive|tram|transport|vintage|aviation|aircraft|heritage line)\b/i }
+  ];
+  var BUDGET_LABELS = { 1: '£', 2: '££', 3: '£££' };
+  var PRICE_LEVELS = { PRICE_LEVEL_FREE: 0, PRICE_LEVEL_INEXPENSIVE: 1, PRICE_LEVEL_MODERATE: 2, PRICE_LEVEL_EXPENSIVE: 3, PRICE_LEVEL_VERY_EXPENSIVE: 4 };
+  // Score nudges. The rating part of the score can reach 0.42, so these are small on purpose.
+  var PROFILE_WEIGHT = { love: 0.08, skip: -0.10, outside: 0.04, vegetarian: 0.05, chain: -0.10, overBudget: -0.06, kidsMenu: 0.03 };
+
+  function defaultProfile() {
+    return { party: 'family', kids: [], vegetarian: false, avoidChains: false, outside: false, budget: 0, love: [], skip: [] };
+  }
+  // Accepts stored JSON text or an object. Anything unreadable or unknown is dropped, never trusted.
+  function normProfile(raw) {
+    var o = raw;
+    if (typeof raw === 'string') { try { o = JSON.parse(raw); } catch (e) { o = null; } }
+    if (!o || typeof o !== 'object') o = {};
+    function pick(arr, allowed) {
+      return allowed.filter(function (id) { return Array.isArray(arr) && arr.indexOf(id) > -1; });
+    }
+    var party = o.party === 'couple' ? 'couple' : 'family';
+    var ids = INTERESTS.map(function (i) { return i.id; });
+    var love = pick(o.love, ids);
+    var skip = pick(o.skip, ids).filter(function (id) { return love.indexOf(id) < 0; });   // love wins if both
+    var b = Math.round(Number(o.budget));
+    return {
+      party: party,
+      kids: party === 'family' ? pick(o.kids, KID_AGES.map(function (k) { return k.id; })) : [],
+      vegetarian: o.vegetarian === true, avoidChains: o.avoidChains === true, outside: o.outside === true,
+      budget: b >= 1 && b <= 3 ? b : 0, love: love, skip: skip
+    };
+  }
+
+  function interestFits(interest, p, hay) {
+    var types = (p.types || []).concat(p.primaryType ? [p.primaryType] : []);
+    return interest.types.some(function (t) { return types.indexOf(t) > -1; }) || interest.re.test(hay || '');
+  }
+
+  // o = { place, cat, hay, isChain, family }. Returns the total nudge, the reasons, and the loved interest if any.
+  function profileAdjust(profile, o) {
+    var out = { total: 0, notes: [], loved: null };
+    if (!profile) return out;
+    var pf = normProfile(profile), p = o.place, W = PROFILE_WEIGHT;
+    if (o.cat && o.cat.id === 'attractions') {
+      var like = INTERESTS.filter(function (i) { return pf.love.indexOf(i.id) > -1 && interestFits(i, p, o.hay); });
+      var dislike = INTERESTS.filter(function (i) { return pf.skip.indexOf(i.id) > -1 && interestFits(i, p, o.hay); });
+      var shorts = function (l) { return l.map(function (i) { return i.short; }).join(' and '); };
+      if (like.length) { out.total += W.love; out.loved = like[0].short; out.notes.push('likes ' + shorts(like)); }
+      else if (dislike.length) { out.total += W.skip; out.notes.push('not keen on ' + shorts(dislike)); }
+    }
+    if (pf.outside && p.outdoorSeating === true) { out.total += W.outside; out.notes.push('outside seating'); }
+    if (pf.vegetarian && o.cat && o.cat.group === 'Eat' && p.servesVegetarianFood === true) { out.total += W.vegetarian; out.notes.push('vegetarian options'); }
+    if (pf.avoidChains && o.isChain) { out.total += W.chain; out.notes.push('national chain'); }
+    var lvl = Object.prototype.hasOwnProperty.call(PRICE_LEVELS, p.priceLevel) ? PRICE_LEVELS[p.priceLevel] : null;
+    if (pf.budget && lvl !== null && lvl > pf.budget) { out.total += W.overBudget; out.notes.push('over your budget'); }
+    var youngKids = pf.kids.indexOf('under5') > -1 || pf.kids.indexOf('5to11') > -1;
+    if (o.family && youngKids && p.menuForChildren === true) { out.total += W.kidsMenu; out.notes.push('kids menu'); }
+    return out;
+  }
+
+  // One plain paragraph for the Settings screen.
+  function profileSummary(profile) {
+    var pf = normProfile(profile), bits = [];
+    if (pf.party === 'couple') bits.push('Just the two of us');
+    else {
+      var ages = KID_AGES.filter(function (k) { return pf.kids.indexOf(k.id) > -1; }).map(function (k) { return k.label.toLowerCase(); });
+      bits.push('Family with the kids' + (ages.length ? ' (' + ages.join(', ') + ')' : ''));
+    }
+    var likes = [];
+    if (pf.vegetarian) likes.push('vegetarian options');
+    if (pf.outside) likes.push('outside seating');
+    if (pf.avoidChains) likes.push('avoids national chains');
+    if (pf.budget) likes.push('budget up to ' + BUDGET_LABELS[pf.budget]);
+    if (likes.length) bits.push(likes.join(', ').replace(/^./, function (c) { return c.toUpperCase(); }));
+    var names = function (ids) { return INTERESTS.filter(function (i) { return ids.indexOf(i.id) > -1; }).map(function (i) { return i.label.toLowerCase(); }).join(', '); };
+    if (pf.love.length) bits.push('Likes ' + names(pf.love));
+    if (pf.skip.length) bits.push('Not keen on ' + names(pf.skip));
+    return bits.join('. ') + '.';
+  }
+
   // ctx = { cat, center:{lat,lng}, radiusM, when }
   function rank(places, ctx) {
     var cat = ctx.cat, seen = {}, out = [];
+    var pf = ctx.profile ? normProfile(ctx.profile) : null;
     places.forEach(function (p) {
       if (!p || !p.id || seen[p.id] || !p.location) return;
       seen[p.id] = true;
@@ -272,20 +392,22 @@
       var raf = ctx.rafIndex ? matchRaf(ctx.rafIndex, p.formattedAddress, name, ctx.now) : null;
       var rafBoost = raf ? (RAF_WEIGHT[cat.id] || 0) * raf.r : 0;
       var famBoost = ctx.family && p.goodForChildren ? 0.06 : 0;
+      var pa = pf ? profileAdjust(pf, { place: p, cat: cat, hay: hay, isChain: isChain, family: !!ctx.family })
+        : { total: 0, notes: [], loved: null };
       // The score is the sum of these, kept apart so the "why here" line can show them.
       var parts = {
         rating: 0.42 * q, near: 0.2 * near, type: 0.2 * typeMatch, kw: 0.18 * kw,
         chain: -chain, noHours: info.state === 'unknown' ? -0.08 : 0, closing: -closing,
-        raf: rafBoost, family: famBoost
+        raf: rafBoost, family: famBoost, profile: pa.total
       };
       var score = parts.rating + parts.near + parts.type + parts.kw + parts.chain +
-        parts.noHours + parts.closing + parts.raf + parts.family;
+        parts.noHours + parts.closing + parts.raf + parts.family + parts.profile;
 
       out.push({
         id: p.id, place: p, name: name, typeName: typeName, summary: summary,
         dist: d, info: info, keyword: kword,
         typeMatch: typeMatch, kw: kw, chain: isChain, raf: raf, score: score,
-        parts: parts, smoothed: smoothed,
+        parts: parts, smoothed: smoothed, profileNotes: pa.notes, loved: pa.loved,
         outside: d > ctx.radiusM, closingSoon: closing > 0
       });
     });
@@ -317,6 +439,7 @@
     if (pt.closing) bits.push('closing soon ' + sg(pt.closing));
     if (pt.raf) bits.push('Real Ale Finder ' + sg(pt.raf));
     if (pt.family) bits.push('good for children ' + sg(pt.family));
+    if (pt.profile) bits.push('your profile ' + sg(pt.profile) + (o.profileNotes && o.profileNotes.length ? ' (' + o.profileNotes.join(', ') + ')' : ''));
     return 'Why here (score ' + f(o.score) + '): ' + bits.join(', ') + '.' +
       (o.outside ? ' Past your limit, so it is listed after places inside it.' : '');
   }
@@ -369,6 +492,8 @@
   }
 
   return {
+    KID_AGES: KID_AGES, INTERESTS: INTERESTS, BUDGET_LABELS: BUDGET_LABELS, PROFILE_WEIGHT: PROFILE_WEIGHT,
+    defaultProfile: defaultProfile, normProfile: normProfile, profileAdjust: profileAdjust, profileSummary: profileSummary,
     priceRangeText: priceRangeText, parkingTag: parkingTag,
     DEFAULT_CAP: DEFAULT_CAP, MIN_CAP: MIN_CAP, MAX_CAP: MAX_CAP, dayKey: dayKey, readUsage: readUsage, clampCap: clampCap,
     CATEGORIES: CATEGORIES, categoryById: categoryById, CHAINS: CHAINS,

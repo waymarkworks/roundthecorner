@@ -45,7 +45,8 @@ PUBS = [
     place('p_far', 'Hops & Hearth', 'Micropub', 'pub', ['pub'], at(0.0185, 0.0), 4.5, 60, summary='Micropub in an old forge.'),
     place('p_nohrs', 'No Hours Alehouse', 'Pub', 'pub', ['pub'], at(-0.003, -0.003), 4.4, 80, hours=False),
     place('p_crown', 'The Crown', 'Pub', 'pub', ['pub', 'bar'], at(0.0035, 0.001), 4.5, 400, goodForChildren=True, outdoorSeating=True,
-          menuForChildren=True, priceRange={'startPrice': {'currencyCode': 'GBP', 'units': '10'}, 'endPrice': {'currencyCode': 'GBP', 'units': '20'}}),
+          menuForChildren=True, servesVegetarianFood=True,
+          priceRange={'startPrice': {'currencyCode': 'GBP', 'units': '10'}, 'endPrice': {'currencyCode': 'GBP', 'units': '20'}}),
     place('p_early', 'Early Doors Real Ale House', 'Real ale pub', 'pub', ['pub'], at(0.0025, 0.0015), 4.6, 150, hrs={'o': 11, 'c': 20}),
 ]
 PUBS2 = [PUBS[0], place('p_tap2', 'Seaview Brewery Tap', 'Brewery taproom', 'bar', ['bar'], at(0.0045, -0.0015), 4.4, 120, summary='Craft beer from the brewery next door.')]
@@ -63,6 +64,12 @@ WINE = [place('wn1', 'Vagabond Wines', 'Wine bar', 'wine_bar', ['wine_bar', 'bar
 COCKTAILS = [place('ck1', 'The Gilded Shaker', 'Cocktail bar', 'cocktail_bar', ['cocktail_bar', 'bar'], at(0.001), 4.6, 500),
              place('ck2', 'Speakeasy 42', 'Cocktail bar', 'cocktail_bar', ['cocktail_bar', 'bar'], at(-0.0015, 0.002), 4.5, 220),
              place('ck3', 'Rum & Ginger', 'Bar', 'bar', ['bar'], at(0.0025, -0.001), 4.3, 150)]
+
+ATTR = [place('a_museum', 'Maritime Museum', 'Museum', 'museum', ['museum', 'tourist_attraction'], at(0.001, -0.001), 4.7, 1800),
+        place('a_abbey', 'Ruined Abbey Visitor Centre', 'Historical landmark', 'historical_landmark', ['historical_landmark', 'tourist_attraction'], at(0.003, 0.001), 4.7, 3100),
+        place('a_zoo', 'Coastal Wildlife Park', 'Zoo', 'zoo', ['zoo', 'tourist_attraction'], at(0.002), 4.6, 2200, goodForChildren=True),
+        place('a_garden', 'Walled Gardens', 'Garden', 'garden', ['garden'], at(0.004, 0.002), 4.5, 900),
+        place('a_play', 'Splash Adventure Park', 'Amusement park', 'amusement_park', ['amusement_park'], at(0.0035, -0.002), 4.3, 1200)]
 
 GEO = [{'location': {'latitude': C[0], 'longitude': C[1]}, 'displayName': {'text': 'Whitby'}, 'formattedAddress': 'Whitby, UK'}]
 
@@ -96,6 +103,7 @@ def places_handler(route):
     elif q in ('cocktail bar', 'craft cocktails'): res = COCKTAILS
     elif q in ('ice cream', 'gelato'): res = ICE
     elif q in ('country park or nature reserve', 'scenic walk viewpoint'): res = WALKS
+    elif q in ('tourist attraction', 'museum zoo castle or historic house'): res = ATTR
     else: res = PUBS
     route.fulfill(status=200, headers=cors, content_type='application/json', body=json.dumps({'places': res}))
 
@@ -128,11 +136,13 @@ def no_hscroll(page, label):
     w = page.evaluate('[document.documentElement.scrollWidth, window.innerWidth]')
     check(w[0] <= w[1], f'no horizontal scroll {label} ({w[0]} <= {w[1]})')
 
-def new_ctx(pw, scheme='light', width=390):
+def new_ctx(pw, scheme='light', width=390, seen=True):
     b = pw.chromium.launch()
     ctx = b.new_context(viewport={'width': width, 'height': 844}, device_scale_factor=2, locale='en-GB',
                         timezone_id='Europe/London', geolocation={'latitude': C[0], 'longitude': C[1]},
                         permissions=['geolocation'], color_scheme=scheme)
+    # The profile screen opens on first start. Most tests are not about it, so they start as a phone that has seen it.
+    if seen: ctx.add_init_script("localStorage.setItem('rtc:profileSeen','1')")
     ctx.route('**/places.googleapis.com/**', places_handler)
     ctx.route('**/maps.googleapis.com/maps/api/js**', lambda r: r.fulfill(status=200, content_type='application/javascript', body=MAPS_JS))
     ctx.route('**/fonts.googleapis.com/**', lambda r: r.fulfill(status=200, content_type='text/css', body=''))
@@ -551,6 +561,144 @@ try:
         check(page.is_checked('input[name=mode][value=walk]') and page.input_value('#mins') == '10', 'old saved distance falls back to 10 min walk')
         real_errors = [e for e in errors if 'ERR_FAILED' not in e and 'fonts' not in e.lower() and 'Failed to load resource' not in e]
         check(not real_errors, 'no page errors in travel tests: ' + '; '.join(real_errors[:3]))
+        b.close()
+
+        # O. profile screen: first start, saving, Settings, editing
+        b, ctx, page, errors = new_ctx(pw, seen=False)
+        page.goto(BASE)
+        check(page.is_visible('#profile') and page.is_visible('#setup'), 'first start with no key shows the profile screen and the key setup')
+        check(page.inner_text('#cancelProfile') == 'Skip for now', 'first start offers Skip for now')
+        page.evaluate(f"localStorage.setItem('rtc:key','{KEY}')"); page.reload()
+        check(page.is_visible('#profile') and not page.is_visible('#setup'), 'with a key saved, the profile screen alone shows on first start')
+        check(page.is_visible('#pKidsField'), 'kids ages are shown for a family')
+        counts = page.evaluate("['#pKids','#pLove','#pSkip'].map(s => document.querySelectorAll(s + ' input').length)")
+        check(counts == [3, 6, 6], f'three age bands and six interests in each list (got {counts})')
+        no_hscroll(page, 'profile screen')
+        page.screenshot(path=f'{OUT}/08-profile-first-run.png', full_page=True)
+        page.check('input[name=pparty][value=couple]', force=True)
+        check(not page.is_visible('#pKidsField'), 'kids ages hide for a couple')
+        page.check('input[name=pparty][value=family]', force=True)
+        check(page.is_visible('#pKidsField'), 'kids ages come back for a family')
+        page.check('#pLove input[value=animals]', force=True)
+        page.check('#pSkip input[value=animals]', force=True)
+        check(not page.is_checked('#pLove input[value=animals]') and page.is_checked('#pSkip input[value=animals]'), 'an interest cannot be loved and skipped at once')
+        page.check('#pLove input[value=animals]', force=True)
+        check(not page.is_checked('#pSkip input[value=animals]'), 'ticking love clears skip for the same interest')
+        page.check('#pLove input[value=history]', force=True)
+        page.check('#pSkip input[value=museums]', force=True)
+        page.check('#pKids input[value=under5]', force=True); page.check('#pKids input[value="5to11"]', force=True)
+        page.check('#pVeg'); page.check('#pChains'); page.check('#pOutside')
+        page.select_option('#pBudget', '2')
+        page.click('#saveProfile')
+        page.wait_for_selector('#profile', state='hidden')
+        stored = json.loads(page.evaluate("localStorage.getItem('rtc:profile')"))
+        want = {'party': 'family', 'kids': ['under5', '5to11'], 'vegetarian': True, 'avoidChains': True, 'outside': True,
+                'budget': 2, 'love': ['animals', 'history'], 'skip': ['museums']}
+        check(stored == want, f'profile saved on the phone (got {stored})')
+        check(page.evaluate("localStorage.getItem('rtc:profileSeen')") == '1', 'profile screen marked as seen')
+        check(page.is_checked('input[name=who][value=family]'), 'who is with you follows the profile')
+        page.reload()
+        check(not page.is_visible('#profile'), 'profile screen does not come back after saving')
+        check(page.evaluate("localStorage.getItem('rtc:profile')") is not None and not page.is_visible('#setup'), 'nothing else opens on start')
+        page.click('#settingsBtn'); page.wait_for_selector('#setup', state='visible')
+        sm = page.inner_text('#profileSummary')
+        print('   summary:', sm)
+        check(sm.startswith('Family with the kids (under 5, 5 to 11).') and 'Vegetarian options' in sm and 'avoids national chains' in sm and 'budget up to ££' in sm, 'Settings summarises the profile')
+        check('Likes animals and wildlife, history and castles.' in sm and 'Not keen on museums and galleries.' in sm, 'Settings summary lists likes and dislikes')
+        no_hscroll(page, 'settings with profile')
+        page.screenshot(path=f'{OUT}/09-settings-profile.png', full_page=True)
+        page.click('#editProfile'); page.wait_for_selector('#profile', state='visible')
+        check(not page.is_visible('#setup'), 'opening the profile from Settings tidies Settings away')
+        check(page.inner_text('#cancelProfile') == 'Cancel', 'editing offers Cancel, not Skip')
+        check(page.is_checked('#pVeg') and page.is_checked('#pChains') and page.is_checked('#pOutside') and page.input_value('#pBudget') == '2', 'edit screen is filled from the saved profile')
+        check(page.is_checked('#pLove input[value=history]') and page.is_checked('#pSkip input[value=museums]') and page.is_checked('#pKids input[value=under5]'), 'interests and ages are filled in too')
+        page.uncheck('#pVeg')
+        page.click('#cancelProfile')
+        check(not page.is_visible('#profile') and json.loads(page.evaluate("localStorage.getItem('rtc:profile')")) == want, 'Cancel changes nothing')
+        page.click('#settingsBtn'); page.click('#editProfile')
+        page.check('input[name=pparty][value=couple]', force=True)
+        page.click('#saveProfile'); page.wait_for_selector('#profile', state='hidden')
+        stored = json.loads(page.evaluate("localStorage.getItem('rtc:profile')"))
+        check(stored['party'] == 'couple' and stored['kids'] == [], 'a couple profile keeps no kids ages')
+        check(page.is_checked('input[name=who][value=couple]'), 'saving a couple profile sets Who is with you to couple')
+        page.click('#settingsBtn')
+        check(page.inner_text('#profileSummary').startswith('Just the two of us.'), 'summary says couple')
+        real_errors = [e for e in errors if 'ERR_FAILED' not in e and 'fonts' not in e.lower() and 'Failed to load resource' not in e]
+        check(not real_errors, 'no page errors in profile tests: ' + '; '.join(real_errors[:3]))
+        b.close()
+
+        # O2. skipping the profile on first start
+        b, ctx, page, errors = new_ctx(pw, seen=False)
+        page.goto(BASE)
+        page.evaluate(f"localStorage.setItem('rtc:key','{KEY}')"); page.reload()
+        page.click('#cancelProfile')
+        check(not page.is_visible('#profile'), 'Skip for now closes the profile screen')
+        check(page.evaluate("localStorage.getItem('rtc:profile')") is None and page.evaluate("localStorage.getItem('rtc:profileSeen')") == '1', 'skipping stores no profile but remembers it was offered')
+        page.reload()
+        check(not page.is_visible('#profile'), 'a skipped profile screen does not nag on the next start')
+        page.click('#settingsBtn')
+        check('Not set up yet' in page.inner_text('#profileSummary'), 'Settings says the profile is not set up')
+        page.click('#editProfile')
+        check(page.is_visible('#profile') and page.is_checked('input[name=pparty][value=family]'), 'it can still be set up later from Settings')
+        b.close()
+
+        # P. Attractions, and what a profile does to the order
+        b, ctx, page, errors = new_ctx(pw)
+        page.goto(BASE)
+        page.evaluate(f"localStorage.setItem('rtc:key','{KEY}')"); page.reload()
+        groups = page.evaluate("[...document.querySelectorAll('#cats .group-label')].map(g => [g.textContent, [...g.nextElementSibling.querySelectorAll('span')].map(s => s.textContent)])")
+        check(groups[2] == ['Out', ['Attractions', 'Walks']], f'Out offers Attractions and Walks (got {groups[2]})')
+        page.fill('#where', 'Whitby')
+        page.check('input[value="attractions"]', force=True)
+        calls.clear(); page.click('#go'); page.wait_for_selector('.card')
+        qs = sorted(c['body']['textQuery'] for c in calls if c['body'].get('pageSize') != 1)
+        check(qs == ['museum zoo castle or historic house', 'tourist attraction'], f'attractions sends its two searches (got {qs})')
+        check(calls[-1]['body'].get('openNow') is True, 'attractions respect Open now')
+        check('places.servesVegetarianFood' in calls[-1]['mask'], 'vegetarian field is in the field mask')
+        base_names = page.eval_on_selector_all('.card h3', 'els => els.map(e => e.textContent)')
+        print('   attractions:', base_names)
+        check(base_names == ['Coastal Wildlife Park', 'Maritime Museum', 'Ruined Abbey Visitor Centre'], 'attractions ranked with no profile (the zoo leads on the family lift for places good for children)')
+        check('change their hours by season' in page.inner_text('#results'), 'attractions note the seasonal hours caveat')
+        check(page.query_selector('.walks-box') is None and page.query_selector('a:text("CAMRA?")') is None, 'no AllTrails box or CAMRA link on attractions')
+        check('Fits your interest' not in page.inner_text('#results'), 'no interest tags without a profile')
+        no_hscroll(page, 'attractions')
+        page.screenshot(path=f'{OUT}/10-attractions.png', full_page=True)
+        # a profile with interests reorders, and tags the places it lifted
+        page.evaluate("localStorage.setItem('rtc:profile', JSON.stringify({party:'family', kids:['5to11'], love:['animals','history'], skip:['museums']})); localStorage.setItem('rtc:why','1')")
+        page.reload(); page.click('#go'); page.wait_for_selector('.card')
+        prof_names = page.eval_on_selector_all('.card h3', 'els => els.map(e => e.textContent)')
+        print('   with profile:', prof_names)
+        check(prof_names == ['Coastal Wildlife Park', 'Ruined Abbey Visitor Centre', 'Maritime Museum'], 'loved interests rise and a skipped one falls')
+        check('Fits your interest in animals' in page.inner_text('#card-0') and 'Fits your interest in history' in page.inner_text('#card-1'), 'lifted places say which interest they fit')
+        check('Fits your interest' not in page.inner_text('#card-2'), 'the skipped one has no interest tag')
+        w0, w2 = page.inner_text('#card-0 .why'), page.inner_text('#card-2 .why')
+        check('your profile +0.08 (likes animals)' in w0, 'why-here names the animals lift: ' + w0[-60:])
+        check('your profile -0.10 (not keen on museums)' in w2, 'why-here names the museums nudge: ' + w2[-70:])
+        page.screenshot(path=f'{OUT}/11-attractions-profile.png', full_page=True)
+        # nothing is ever hidden: skipping every interest still shows three places
+        page.evaluate("localStorage.setItem('rtc:profile', JSON.stringify({love:[], skip:['animals','history','museums','gardens','play','transport']}))")
+        page.reload(); page.click('#go'); page.wait_for_selector('.card')
+        check(len(page.query_selector_all('.card')) == 3, 'skipping every interest still shows three places')
+        # a damaged profile is ignored, not fatal
+        page.evaluate("localStorage.setItem('rtc:profile', '{not json')")
+        page.reload(); page.click('#go'); page.wait_for_selector('.card')
+        check(page.eval_on_selector_all('.card h3', 'els => els.map(e => e.textContent)') == base_names, 'an unreadable profile behaves like no profile')
+        # vegetarian tag: only when asked for, and only when Google says so
+        def all_pages_text():
+            page.wait_for_selector('.card')
+            out = page.inner_text('#results')
+            while page.query_selector('text=Show next 3'):
+                page.click('text=Show next 3'); page.wait_for_timeout(150)
+                out += page.inner_text('#results')
+            return out
+        page.evaluate("localStorage.setItem('rtc:profile', JSON.stringify({vegetarian:true})); localStorage.setItem('rtc:why','0')")
+        page.reload(); page.fill('#where', 'Whitby'); page.check('input[value="pubfood"]', force=True); page.select_option('#day', 'any'); page.click('#go')
+        check('Vegetarian options' in all_pages_text(), 'vegetarian tag shows when the profile asks and Google says yes')
+        page.evaluate("localStorage.setItem('rtc:profile', JSON.stringify({vegetarian:false}))")
+        page.reload(); page.fill('#where', 'Whitby'); page.check('input[value="pubfood"]', force=True); page.select_option('#day', 'any'); page.click('#go')
+        check('Vegetarian options' not in all_pages_text(), 'no vegetarian tag when the profile does not ask for it')
+        real_errors = [e for e in errors if 'ERR_FAILED' not in e and 'fonts' not in e.lower() and 'Failed to load resource' not in e]
+        check(not real_errors, 'no page errors in attractions tests: ' + '; '.join(real_errors[:3]))
         b.close()
 finally:
     srv.terminate()

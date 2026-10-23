@@ -16,7 +16,7 @@
     'regularOpeningHours', 'currentOpeningHours', 'googleMapsUri', 'websiteUri',
     'primaryType', 'primaryTypeDisplayName', 'types', 'priceLevel', 'editorialSummary',
     'outdoorSeating', 'goodForChildren', 'servesBeer', 'businessStatus',
-    'menuForChildren', 'priceRange', 'parkingOptions'
+    'menuForChildren', 'priceRange', 'parkingOptions', 'servesVegetarianFood'
   ].map(function (f) { return 'places.' + f; }).join(',');
   var GEO_FIELDS = 'places.location,places.displayName,places.formattedAddress';
   var GPS_LABEL = 'My location';
@@ -28,7 +28,8 @@
     ranked: [], page: 0, ctx: null, label: '',
     mapsPromise: null, map: null, markers: [], youMarker: null, busy: false, installEvt: null,
     raf: null,  // Real Ale Finder list from raf.json, refreshed daily by the GitHub job
-    why: store.get('rtc:why') === '1'   // show the score breakdown on each card
+    why: store.get('rtc:why') === '1',  // show the score breakdown on each card
+    profile: L.normProfile(store.get('rtc:profile'))   // who is travelling and what they like; stays on this phone
   };
 
   /* ---------- small helpers ---------- */
@@ -216,7 +217,7 @@
       };
       var lists = await Promise.all(cat.queries.map(function (q) { return searchText(body(q), FIELDS); }));
       var all = [].concat.apply([], lists);
-      state.ctx = { cat: cat, center: center, radiusM: radiusM, mode: mode, minsLabel: L.travelOptionLabel(mode, mins), when: when, rafIndex: L.buildRafIndex(state.raf), now: new Date(), family: whoIsWithMe() === 'family' };
+      state.ctx = { cat: cat, center: center, radiusM: radiusM, mode: mode, minsLabel: L.travelOptionLabel(mode, mins), when: when, rafIndex: L.buildRafIndex(state.raf), now: new Date(), family: whoIsWithMe() === 'family', profile: state.profile };
       state.label = center.label;
       state.ranked = L.rank(all, state.ctx);
       state.page = 0;
@@ -269,6 +270,8 @@
     if (p.servesBeer && state.ctx.cat.group === 'Eat') t.push('Serves beer');
     var park = state.ctx.mode === 'car' ? L.parkingTag(p.parkingOptions) : null;
     if (park) t.push(park);
+    // Only when Google says yes, and only for people who said it matters. No tag means unknown, not no.
+    if (state.ctx.profile && state.ctx.profile.vegetarian && p.servesVegetarianFood && state.ctx.cat.group === 'Eat') t.push('Vegetarian options');
     return t;
   }
 
@@ -293,6 +296,7 @@
     if (o.outside) pills.appendChild(el('span', 'pill warn', 'A bit past your limit'));
     if (o.raf) pills.appendChild(el('span', 'pill ' + (o.raf.fresh ? 'open' : 'warn'), 'Real Ale Finder: ' + o.raf.label));
     if (o.keyword && state.ctx.cat.keywords) pills.appendChild(el('span', 'pill', 'Matches "' + o.keyword + '"'));
+    if (o.loved) pills.appendChild(el('span', 'pill', 'Fits your interest in ' + o.loved));
     tags(p).forEach(function (t) { pills.appendChild(el('span', 'pill', t)); });
     if (pills.childNodes.length) c.appendChild(pills);
 
@@ -339,6 +343,10 @@
       r.appendChild(el('p', stale ? 'notice' : 'fine',
         'Pubs on Real Ale Finder that were updated recently rank higher. List last refreshed ' + when +
         (stale ? ', so the update times may be out of date.' : '.') + ' ' + matched + ' of ' + list.length + ' candidates are on it.'));
+    }
+
+    if (slice.length && cat.id === 'attractions') {
+      r.appendChild(el('p', 'fine', 'Attractions often change their hours by season, and Google\'s hours can lag. Check the website before you set off.'));
     }
 
     if (!slice.length) {
@@ -440,6 +448,75 @@
     }
   }
 
+  /* ---------- profile ---------- */
+  // Who is travelling and what they like. Stored in this browser only. It nudges the ranking
+  // (see logic.js) and never hides a place.
+  function chipBox(host, name, value, label) {
+    var lab = el('label', 'chip'), inp = document.createElement('input');
+    inp.type = 'checkbox'; inp.name = name; inp.value = value;
+    lab.appendChild(inp); lab.appendChild(el('span', null, label));
+    host.appendChild(lab);
+    return inp;
+  }
+  function checkedValues(name) {
+    return Array.prototype.map.call(document.querySelectorAll('input[name="' + name + '"]:checked'), function (i) { return i.value; });
+  }
+  function syncKidsField() {
+    $('pKidsField').hidden = (document.querySelector('input[name="pparty"]:checked') || {}).value === 'couple';
+  }
+  function buildProfileForm() {
+    L.KID_AGES.forEach(function (k) { chipBox($('pKids'), 'pkids', k.id, k.label); });
+    L.INTERESTS.forEach(function (i) {
+      var love = chipBox($('pLove'), 'plove', i.id, i.label);
+      var skip = chipBox($('pSkip'), 'pskip', i.id, i.label);
+      // A kind of attraction is either loved or not for you, never both.
+      love.addEventListener('change', function () { if (love.checked) skip.checked = false; });
+      skip.addEventListener('change', function () { if (skip.checked) love.checked = false; });
+    });
+    document.querySelectorAll('input[name="pparty"]').forEach(function (r) { r.addEventListener('change', syncKidsField); });
+  }
+  function fillProfileForm(p) {
+    document.querySelector('input[name="pparty"][value="' + p.party + '"]').checked = true;
+    document.querySelectorAll('input[name="pkids"]').forEach(function (i) { i.checked = p.kids.indexOf(i.value) > -1; });
+    document.querySelectorAll('input[name="plove"]').forEach(function (i) { i.checked = p.love.indexOf(i.value) > -1; });
+    document.querySelectorAll('input[name="pskip"]').forEach(function (i) { i.checked = p.skip.indexOf(i.value) > -1; });
+    $('pVeg').checked = p.vegetarian; $('pChains').checked = p.avoidChains; $('pOutside').checked = p.outside;
+    $('pBudget').value = String(p.budget);
+    syncKidsField();
+  }
+  function readProfileForm() {
+    return L.normProfile({
+      party: (document.querySelector('input[name="pparty"]:checked') || {}).value,
+      kids: checkedValues('pkids'), love: checkedValues('plove'), skip: checkedValues('pskip'),
+      vegetarian: $('pVeg').checked, avoidChains: $('pChains').checked, outside: $('pOutside').checked,
+      budget: parseInt($('pBudget').value, 10)
+    });
+  }
+  function showProfileSummary() {
+    $('profileSummary').textContent = store.get('rtc:profile')
+      ? L.profileSummary(state.profile)
+      : 'Not set up yet. Tap Edit profile to say who is travelling and what you like.';
+  }
+  function openProfile(first) {
+    fillProfileForm(state.profile);
+    $('cancelProfile').textContent = first ? 'Skip for now' : 'Cancel';
+    $('profileMsg').textContent = '';
+    $('setup').hidden = true; $('settingsBtn').setAttribute('aria-expanded', 'false');
+    $('profile').hidden = false;
+    if (!first) { try { $('profile').scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {} }
+  }
+  function closeProfile() { $('profile').hidden = true; }
+  function saveProfile() {
+    state.profile = readProfileForm();
+    store.set('rtc:profile', JSON.stringify(state.profile));
+    store.set('rtc:profileSeen', '1');
+    // Who is with you on the search form follows the profile when you save it.
+    document.querySelector('input[name="who"][value="' + state.profile.party + '"]').checked = true;
+    showProfileSummary();
+    $('profileMsg').textContent = 'Saved on this phone. It applies from your next Find.';
+    setTimeout(closeProfile, 900);
+  }
+
   /* ---------- wiring ---------- */
   function buildCats(selected) {
     var host = $('cats'), groups = {};
@@ -461,7 +538,13 @@
   function init() {
     var prefs = {};
     try { prefs = JSON.parse(store.get('rtc:prefs') || '{}') || {}; } catch (e) {}
-    document.querySelector('input[name="who"][value="' + (prefs.who === 'couple' ? 'couple' : 'family') + '"]').checked = true;
+    var who0 = prefs.who === 'couple' || prefs.who === 'family' ? prefs.who : state.profile.party;   // a saved Find wins; otherwise the profile decides
+    document.querySelector('input[name="who"][value="' + who0 + '"]').checked = true;
+    buildProfileForm();
+    showProfileSummary();
+    $('editProfile').addEventListener('click', function () { openProfile(false); });
+    $('saveProfile').addEventListener('click', saveProfile);
+    $('cancelProfile').addEventListener('click', function () { store.set('rtc:profileSeen', '1'); closeProfile(); });
     buildCats(L.categoryById(prefs.cat).id);   // old saved choices (micropub, real ale, craft beer) become Pub
     var mode0 = prefs.mode === 'car' ? 'car' : 'walk';
     document.querySelector('input[name="mode"][value="' + mode0 + '"]').checked = true;
@@ -516,6 +599,7 @@
         .catch(function () {});
     } catch (e) {}
 
+    if (!store.get('rtc:profileSeen')) openProfile(true);   // first start: ask who is travelling
     if (!state.key) openSetup(true);
     if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
       navigator.serviceWorker.register('sw.js').catch(function () {});
