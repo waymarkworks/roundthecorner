@@ -340,7 +340,36 @@
     return Math.min(MAX_CAP, Math.max(MIN_CAP, n));
   }
 
+  // Google's priceRange is { startPrice, endPrice } of Money ({ currencyCode, units (string), nanos }).
+  // Either end can be missing. Returns e.g. "£10-20", "£20+", "up to £15", or null.
+  function moneyNum(m) {
+    if (!m || m.units === undefined && m.nanos === undefined) return null;
+    var v = Number(m.units || 0) + Number(m.nanos || 0) / 1e9;
+    return isFinite(v) && v >= 0 ? v : null;
+  }
+  function moneyStr(v) { return Math.abs(v - Math.round(v)) < 0.005 ? String(Math.round(v)) : v.toFixed(2); }
+  function priceRangeText(pr) {
+    if (!pr) return null;
+    var a = moneyNum(pr.startPrice), b = moneyNum(pr.endPrice);
+    if (a === null && b === null) return null;
+    var cur = (pr.startPrice || pr.endPrice || {}).currencyCode;
+    var sym = cur === 'GBP' || !cur ? '£' : cur + ' ';
+    if (a !== null && b !== null) return sym + moneyStr(a) + '–' + moneyStr(b);
+    if (a !== null) return sym + moneyStr(a) + '+';
+    return 'up to ' + sym + moneyStr(b);
+  }
+
+  // Google's parkingOptions is a set of true/false flags. Only a true flag counts; absent or false says nothing.
+  function parkingTag(po) {
+    if (!po) return null;
+    if (po.freeParkingLot || po.freeStreetParking || po.freeGarageParking) return 'Free parking';
+    if (po.paidParkingLot || po.paidStreetParking || po.paidGarageParking) return 'Paid parking';
+    if (po.valetParking) return 'Valet parking';
+    return null;
+  }
+
   return {
+    priceRangeText: priceRangeText, parkingTag: parkingTag,
     DEFAULT_CAP: DEFAULT_CAP, MIN_CAP: MIN_CAP, MAX_CAP: MAX_CAP, dayKey: dayKey, readUsage: readUsage, clampCap: clampCap,
     CATEGORIES: CATEGORIES, categoryById: categoryById, CHAINS: CHAINS,
     distanceM: distanceM, miles: miles, etaText: etaText,

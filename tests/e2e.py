@@ -33,6 +33,8 @@ def place(pid, name, kind, ptype, types, loc, rating, n, open_now=True, hours=Tr
 PUBS = [
     place('p_cask', 'The Cask Corner', 'Micropub', 'pub', ['pub', 'bar'], at(0.0018), 4.8, 210,
           summary='Tiny corner micropub with six rotating cask ales.', allowsDogs=True, outdoorSeating=False, websiteUri='https://example.com/cask',
+          parkingOptions={'freeParkingLot': True, 'paidStreetParking': False},
+          priceRange={'startPrice': {'currencyCode': 'GBP', 'units': '8'}, 'endPrice': {'currencyCode': 'GBP', 'units': '15'}},
           formattedAddress='Church St, Whitby YO22 4DE, UK'),
     place('p_tap', 'Harbour Tap', 'Taproom', 'bar', ['bar', 'pub'], at(-0.004, 0.002), 4.6, 340,
           summary='Brewery taproom on the quay with a craft beer list.', outdoorSeating=True, allowsDogs=True,
@@ -42,7 +44,8 @@ PUBS = [
     place('p_hotel', 'Grand Hotel', 'Hotel', 'lodging', ['lodging'], at(0.001, -0.001), 4.9, 900),
     place('p_far', 'Hops & Hearth', 'Micropub', 'pub', ['pub'], at(0.0185, 0.0), 4.5, 60, summary='Micropub in an old forge.'),
     place('p_nohrs', 'No Hours Alehouse', 'Pub', 'pub', ['pub'], at(-0.003, -0.003), 4.4, 80, hours=False),
-    place('p_crown', 'The Crown', 'Pub', 'pub', ['pub', 'bar'], at(0.0035, 0.001), 4.5, 400, goodForChildren=True, outdoorSeating=True),
+    place('p_crown', 'The Crown', 'Pub', 'pub', ['pub', 'bar'], at(0.0035, 0.001), 4.5, 400, goodForChildren=True, outdoorSeating=True,
+          menuForChildren=True, priceRange={'startPrice': {'currencyCode': 'GBP', 'units': '10'}, 'endPrice': {'currencyCode': 'GBP', 'units': '20'}}),
     place('p_early', 'Early Doors Real Ale House', 'Real ale pub', 'pub', ['pub'], at(0.0025, 0.0015), 4.6, 150, hrs={'o': 11, 'c': 20}),
 ]
 PUBS2 = [PUBS[0], place('p_tap2', 'Seaview Brewery Tap', 'Brewery taproom', 'bar', ['bar'], at(0.0045, -0.0015), 4.4, 120, summary='Craft beer from the brewery next door.')]
@@ -198,6 +201,7 @@ try:
         check(abs(c0['locationBias']['circle']['center']['latitude'] - C[0]) < 1e-6, 'search biased to the GPS point')
         check(abs(c0['locationBias']['circle']['radius'] - (10 * 80 / 1.3) * 1.6) < 1, 'default is a 10 minute walk, search radius is 1.6x that')
         check(calls[0]['key'] == KEY and 'places.rating' in calls[0]['mask'] and 'places.currentOpeningHours' in calls[0]['mask'], 'key and field mask sent')
+        check(all('places.' + f in calls[0]['mask'] for f in ('menuForChildren', 'priceRange', 'parkingOptions')), 'new fields are in the field mask')
         first = page.inner_text('#card-0')
         check('★ 4.8 (210)' in first, 'rating and count shown')
         check('Open until 22:00' in first, 'open-until time shown')
@@ -484,12 +488,16 @@ try:
         page.fill('#where', 'Whitby'); page.click('#go')
         fam = all_pills()
         check('Kids OK' in fam, 'family mode shows the Kids OK tag')
+        check('Kids menu' in fam, 'family mode shows the Kids menu tag')
+        check('£10–20' in fam and '£8–15' in fam, 'price ranges are shown on cards')
+        check('Free parking' not in fam, 'no parking tag when on foot')
         check('Dogs' not in fam, 'no dog tag anywhere')
         page.check('input[name=who][value=couple]')
         page.click('#go')
         page.wait_for_function("document.querySelector('.card h3') && document.querySelector('.card h3').textContent === 'The Cask Corner'")
         cou = all_pills()
         check('Kids OK' not in cou, 'couple mode hides the Kids OK tag')
+        check('Kids menu' not in cou, 'couple mode hides the Kids menu tag')
         page.reload()
         check(page.is_checked('input[name=who][value=couple]'), 'choice is remembered')
         no_hscroll(page, 'who toggle')
@@ -521,6 +529,7 @@ try:
         check(abs(r - (15 * 80 / 1.3) * 1.6) < 1, f'15 min walk -> {r:.0f} m search radius')
         txt = page.inner_text('#card-0')
         check('min walk' in txt and 'by car' not in txt, 'cards show walking times')
+        check('parking' not in txt.lower(), 'walking mode shows no parking tag')
         hrefs = dict(page.eval_on_selector_all('#card-0 a', 'els => els.map(e => [e.textContent, e.href])'))
         check(hrefs['Directions'].endswith('travelmode=walking') and 'Bus or train' not in hrefs, 'walking directions, no bus link')
         # driving search
@@ -532,6 +541,7 @@ try:
         hrefs = dict(page.eval_on_selector_all('#card-0 a', 'els => els.map(e => [e.textContent, e.href])'))
         check(hrefs['Drive there'].endswith('travelmode=driving'), 'drive link uses driving')
         check(hrefs['Bus or train'].endswith('travelmode=transit') and 'destination_place_id=' in hrefs['Bus or train'], 'bus or train link uses transit')
+        check('Free parking' in page.inner_text('#card-0'), 'car mode shows the parking tag when Google says there is parking')
         no_hscroll(page, 'travel mode')
         page.screenshot(path=f'{OUT}/07-mode.png', full_page=True)
         page.reload()

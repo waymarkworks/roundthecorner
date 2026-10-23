@@ -15,7 +15,8 @@
     'id', 'displayName', 'formattedAddress', 'location', 'rating', 'userRatingCount',
     'regularOpeningHours', 'currentOpeningHours', 'googleMapsUri', 'websiteUri',
     'primaryType', 'primaryTypeDisplayName', 'types', 'priceLevel', 'editorialSummary',
-    'outdoorSeating', 'goodForChildren', 'servesBeer', 'businessStatus'
+    'outdoorSeating', 'goodForChildren', 'servesBeer', 'businessStatus',
+    'menuForChildren', 'priceRange', 'parkingOptions'
   ].map(function (f) { return 'places.' + f; }).join(',');
   var GEO_FIELDS = 'places.location,places.displayName,places.formattedAddress';
   var GPS_LABEL = 'My location';
@@ -264,7 +265,10 @@
     var t = [];
     if (p.outdoorSeating) t.push('Outside seating');
     if (p.goodForChildren && state.ctx.family) t.push('Kids OK');
+    if (p.menuForChildren && state.ctx.family) t.push('Kids menu');
     if (p.servesBeer && state.ctx.cat.group === 'Eat') t.push('Serves beer');
+    var park = state.ctx.mode === 'car' ? L.parkingTag(p.parkingOptions) : null;
+    if (park) t.push(park);
     return t;
   }
 
@@ -275,7 +279,8 @@
     top.appendChild(el('div', 'num', String(idx + 1)));
     var mid = el('div');
     mid.appendChild(el('h3', null, o.name));
-    var bits = [o.typeName, PRICE[p.priceLevel]].filter(Boolean);
+    // A real spend range (e.g. £10–20) when Google has one, otherwise the £ symbols.
+    var bits = [o.typeName, L.priceRangeText(p.priceRange) || PRICE[p.priceLevel]].filter(Boolean);
     bits.push(L.miles(o.dist) + ' mi, ' + L.etaFor(state.ctx.mode, o.dist));
     mid.appendChild(el('p', 'sub', bits.join(' · ')));
     top.appendChild(mid);

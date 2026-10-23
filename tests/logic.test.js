@@ -300,6 +300,35 @@ t('rank: family mode gives a small lift to places good for children; couple mode
   assert(Math.abs(c[0].score - c[1].score) < 1e-9);
 });
 
+t('priceRange: both ends, one end, decimals, missing', () => {
+  const g = (u, n) => ({ currencyCode: 'GBP', units: String(u), nanos: n });
+  assert.strictEqual(L.priceRangeText({ startPrice: g(10), endPrice: g(20) }), '£10–20');
+  assert.strictEqual(L.priceRangeText({ startPrice: g(20) }), '£20+');
+  assert.strictEqual(L.priceRangeText({ endPrice: g(15) }), 'up to £15');
+  assert.strictEqual(L.priceRangeText({ startPrice: g(7, 500000000), endPrice: g(12) }), '£7.50–12');
+  assert.strictEqual(L.priceRangeText({ startPrice: { currencyCode: 'GBP' }, endPrice: g(30) }), 'up to £30');  // Google omits a zero amount
+  assert.strictEqual(L.priceRangeText({}), null);
+  assert.strictEqual(L.priceRangeText(undefined), null);
+});
+t('parkingOptions: only true flags count, free beats paid', () => {
+  assert.strictEqual(L.parkingTag({ freeParkingLot: true, paidStreetParking: true }), 'Free parking');
+  assert.strictEqual(L.parkingTag({ paidGarageParking: true }), 'Paid parking');
+  assert.strictEqual(L.parkingTag({ valetParking: true }), 'Valet parking');
+  assert.strictEqual(L.parkingTag({ freeParkingLot: false, paidParkingLot: false }), null);
+  assert.strictEqual(L.parkingTag({}), null);
+  assert.strictEqual(L.parkingTag(undefined), null);
+});
+t('rank: kids menu, price range and parking do not change the score', () => {
+  const centre = { lat: 54.4858, lng: -0.6206 };
+  const mkp = (id, extra) => Object.assign({ id, displayName: { text: 'Pub ' + id }, formattedAddress: 'X', primaryType: 'pub', types: ['pub'],
+    location: { latitude: centre.lat + 0.002, longitude: centre.lng }, rating: 4.5, userRatingCount: 150, businessStatus: 'OPERATIONAL',
+    currentOpeningHours: { openNow: true } }, extra);
+  const ctx = { cat: L.categoryById('pub'), center: centre, radiusM: 1609, when: { mode: 'any', date: sat(12) }, now: sat(12), rafIndex: null, family: true, mode: 'car' };
+  const r = L.rank([mkp('a', {}), mkp('b', { menuForChildren: true, parkingOptions: { freeParkingLot: true },
+    priceRange: { startPrice: { currencyCode: 'GBP', units: '5' } } })], ctx);
+  assert(Math.abs(r[0].score - r[1].score) < 1e-12, String(r[0].score - r[1].score));
+});
+
 t('travel: a 10 minute walk is about 615 m and a card at that distance says 10 min walk', () => {
   const r = L.radiusFor('walk', 10);
   assert(Math.abs(r - 615.4) < 0.5, String(r));
