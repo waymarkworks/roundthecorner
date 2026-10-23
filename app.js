@@ -294,6 +294,7 @@
     var op = openPill(o);
     if (op) pills.appendChild(el('span', 'pill ' + op[1], op[0]));
     if (o.outside) pills.appendChild(el('span', 'pill warn', 'A bit past your limit'));
+    if (o.thin) pills.appendChild(el('span', 'pill warn', o.reviews ? 'Only ' + o.reviews + (o.reviews === 1 ? ' review' : ' reviews') : 'No reviews yet'));
     if (o.raf) pills.appendChild(el('span', 'pill ' + (o.raf.fresh ? 'open' : 'warn'), 'Real Ale Finder: ' + o.raf.label));
     if (o.keyword && state.ctx.cat.keywords) pills.appendChild(el('span', 'pill', 'Matches "' + o.keyword + '"'));
     if (o.loved) pills.appendChild(el('span', 'pill', 'Fits your interest in ' + o.loved));

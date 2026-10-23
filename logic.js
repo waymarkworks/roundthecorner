@@ -58,6 +58,10 @@
         'wildlife_park', 'visitor_center', 'planetarium', 'indoor_playground', 'adventure_sports_center',
         'miniature_golf_course', 'go_karting_venue'],
       keywords: /museum|gallery|zoo\b|aquarium|castle|abbey|priory|palace|manor|historic|heritage|gardens?\b|farm park|wildlife|adventure|theme park|soft play|railway|steam|maze|visitor cent|safari|sealife|planetarium/i,
+      // Google tags almost anything as tourist_attraction, so a listing with no or very few reviews
+      // (a joke or stray entry) can fill a slot in a sparse area. Below this many reviews a place is
+      // "thin": dropped when three better-reviewed places exist, otherwise listed after them and flagged.
+      minReviews: 20,
       chain: 0 },
     { id: 'walks', group: 'Out', label: 'Walks',
       queries: ['country park or nature reserve', 'scenic walk viewpoint'],
@@ -408,16 +412,26 @@
         dist: d, info: info, keyword: kword,
         typeMatch: typeMatch, kw: kw, chain: isChain, raf: raf, score: score,
         parts: parts, smoothed: smoothed, profileNotes: pa.notes, loved: pa.loved,
+        thin: !!cat.minReviews && n < cat.minReviews, reviews: n,
         outside: d > ctx.radiusM, closingSoon: closing > 0
       });
     });
 
     var strong = out.filter(function (o) { return o.typeMatch || o.kw; });
     var pool = strong.length >= 3 ? strong : out;
+    // Thin-review places (see minReviews) go after every well-reviewed place, near or far,
+    // and are dropped altogether once three well-reviewed places are available.
+    var solid = pool.filter(function (o) { return !o.thin; });
+    var thin = pool.filter(function (o) { return o.thin; });
     function byScore(a, b) { return b.score - a.score; }
-    var inside = pool.filter(function (o) { return !o.outside; }).sort(byScore);
-    var outside = pool.filter(function (o) { return o.outside && o.dist <= ctx.radiusM * 1.6; }).sort(byScore);
-    return inside.concat(outside).slice(0, 15);
+    function tier(list) {
+      var inside = list.filter(function (o) { return !o.outside; }).sort(byScore);
+      var outside = list.filter(function (o) { return o.outside && o.dist <= ctx.radiusM * 1.6; }).sort(byScore);
+      return inside.concat(outside);
+    }
+    var ranked = tier(solid);
+    if (ranked.length < 3) ranked = ranked.concat(tier(thin));
+    return ranked.slice(0, 15);
   }
 
   // One plain line saying how a ranked result got its score. Shown when "why here" is switched on.
@@ -441,7 +455,8 @@
     if (pt.family) bits.push('good for children ' + sg(pt.family));
     if (pt.profile) bits.push('your profile ' + sg(pt.profile) + (o.profileNotes && o.profileNotes.length ? ' (' + o.profileNotes.join(', ') + ')' : ''));
     return 'Why here (score ' + f(o.score) + '): ' + bits.join(', ') + '.' +
-      (o.outside ? ' Past your limit, so it is listed after places inside it.' : '');
+      (o.outside ? ' Past your limit, so it is listed after places inside it.' : '') +
+      (o.thin ? ' Few reviews, so it is listed after better-reviewed places.' : '');
   }
 
   /* ---------- daily search allowance (a guard against runaway Google spend) ---------- */

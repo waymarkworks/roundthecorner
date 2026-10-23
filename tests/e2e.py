@@ -71,6 +71,14 @@ ATTR = [place('a_museum', 'Maritime Museum', 'Museum', 'museum', ['museum', 'tou
         place('a_garden', 'Walled Gardens', 'Garden', 'garden', ['garden'], at(0.004, 0.002), 4.5, 900),
         place('a_play', 'Splash Adventure Park', 'Amusement park', 'amusement_park', ['amusement_park'], at(0.0035, -0.002), 4.3, 1200)]
 
+# Stray listings: Google tags them as tourist attractions but they have almost no reviews.
+SPOT = place('a_spot', 'The Spot', 'Tourist attraction', 'tourist_attraction', ['tourist_attraction'], at(0.0005), 5.0, 10)
+NOREV = place('a_norev', 'Corner Lookout', 'Tourist attraction', 'tourist_attraction', ['tourist_attraction'], at(0.0008, 0.0004), None, None)
+attr_mode = {'sparse': False}
+def attr_list():
+    # sparse: only one properly reviewed place nearby, as in a built-up area with few real attractions
+    return [ATTR[0], SPOT, NOREV] if attr_mode['sparse'] else ATTR + [SPOT, NOREV]
+
 GEO = [{'location': {'latitude': C[0], 'longitude': C[1]}, 'displayName': {'text': 'Whitby'}, 'formattedAddress': 'Whitby, UK'}]
 
 calls = []
@@ -103,7 +111,7 @@ def places_handler(route):
     elif q in ('cocktail bar', 'craft cocktails'): res = COCKTAILS
     elif q in ('ice cream', 'gelato'): res = ICE
     elif q in ('country park or nature reserve', 'scenic walk viewpoint'): res = WALKS
-    elif q in ('tourist attraction', 'museum zoo castle or historic house'): res = ATTR
+    elif q in ('tourist attraction', 'museum zoo castle or historic house'): res = attr_list()
     else: res = PUBS
     route.fulfill(status=200, headers=cors, content_type='application/json', body=json.dumps({'places': res}))
 
@@ -663,6 +671,22 @@ try:
         check('Fits your interest' not in page.inner_text('#results'), 'no interest tags without a profile')
         no_hscroll(page, 'attractions')
         page.screenshot(path=f'{OUT}/10-attractions.png', full_page=True)
+        # stray listings with no or very few reviews are dropped once enough proper places exist
+        page.click('text=Show next 3')
+        page.wait_for_function("document.querySelector('.card h3') && document.querySelector('.card h3').textContent === 'Walled Gardens'")
+        names2a = page.eval_on_selector_all('.card h3', 'els => els.map(e => e.textContent)')
+        check(names2a == ['Walled Gardens', 'Splash Adventure Park'], f'page two holds only the properly reviewed places (got {names2a})')
+        check('The Spot' not in base_names + names2a and 'Corner Lookout' not in base_names + names2a, 'a 10-review listing and an unreviewed one are not shown when five proper places exist')
+        # in a sparse area they fill the gaps, after the proper place, and say why
+        attr_mode['sparse'] = True
+        page.click('#go'); page.wait_for_selector('.card')
+        sp = page.eval_on_selector_all('.card h3', 'els => els.map(e => e.textContent)')
+        check(sp == ['Maritime Museum', 'The Spot', 'Corner Lookout'], f'thin listings come after the proper one when there are too few (got {sp})')
+        check('review' not in page.inner_text('#card-0 .pills').lower(), 'the well-reviewed place has no review warning')
+        check('Only 10 reviews' in page.inner_text('#card-1') and 'No reviews yet' in page.inner_text('#card-2'), 'thin listings are flagged with their review count')
+        check(page.query_selector('#card-1 .pill.warn:has-text("Only 10 reviews")') is not None, 'the flag is a warning pill')
+        no_hscroll(page, 'sparse attractions')
+        attr_mode['sparse'] = False
         # a profile with interests reorders, and tags the places it lifted
         page.evaluate("localStorage.setItem('rtc:profile', JSON.stringify({party:'family', kids:['5to11'], love:['animals','history'], skip:['museums']})); localStorage.setItem('rtc:why','1')")
         page.reload(); page.click('#go'); page.wait_for_selector('.card')

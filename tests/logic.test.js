@@ -373,6 +373,43 @@ t('rank: attractions use opening hours (a shut museum is dropped in now mode)', 
   assert.strictEqual(r[0].keyword, 'museum');
 });
 
+const thinCtx = () => Object.assign(ctx('attractions'), { family: false });
+const att = (id, name, n, rating, over) => mk(id, name, Object.assign({ primaryType: 'tourist_attraction', types: ['tourist_attraction'],
+  primaryTypeDisplayName: { text: name }, userRatingCount: n, rating: rating }, over || {}));
+t('thin reviews: Attractions has a review floor and the other categories do not', () => {
+  assert.strictEqual(L.categoryById('attractions').minReviews, 20);
+  L.CATEGORIES.filter(c => c.id !== 'attractions').forEach(c => assert.strictEqual(c.minReviews, undefined, c.id));
+});
+t('thin reviews: a 10-review 5.0 and an unrated listing are dropped when three proper places exist', () => {
+  const proper = ['a', 'b', 'c'].map((i, k) => att(i, 'Museum ' + i, 300 + k, 4.4, { primaryType: 'museum', types: ['museum'] }));
+  const spot = att('spot', 'The Spot', 10, 5.0), none = att('none', 'Corner Lookout', undefined, undefined);
+  const r = L.rank(proper.concat(spot, none), thinCtx());
+  assert.deepStrictEqual(ids(r).sort(), ['a', 'b', 'c']);
+  assert(r.every(o => !o.thin));
+});
+t('thin reviews: with fewer than three proper places the thin ones follow them, flagged and counted', () => {
+  const proper = att('p', 'Town Museum', 400, 4.3, { primaryType: 'museum', types: ['museum'], location: at(0.01, 0) });  // outside the 1609 m radius
+  const spot = att('spot', 'The Spot', 10, 5.0, { location: at(0.0005, 0) }), none = att('none', 'Corner Lookout', undefined, undefined, { location: at(0.0006, 0) });
+  const r = L.rank([spot, none, proper], thinCtx());
+  assert.strictEqual(r[0].id, 'p', 'a proper place outside the radius still beats thin ones inside it');
+  assert.deepStrictEqual(ids(r).slice(1), ['spot', 'none']);
+  assert.strictEqual(r[1].thin, true); assert.strictEqual(r[1].reviews, 10);
+  assert.strictEqual(r[2].thin, true); assert.strictEqual(r[2].reviews, 0);
+  assert.strictEqual(r[0].thin, false);
+});
+t('thin reviews: exactly the floor counts as proper, and why-here says when a place is thin', () => {
+  const at20 = L.rank([att('x', 'Twenty Reviews', 20, 4.5)], thinCtx())[0];
+  const at19 = L.rank([att('y', 'Nineteen Reviews', 19, 4.5)], thinCtx())[0];
+  assert.strictEqual(at20.thin, false); assert.strictEqual(at19.thin, true);
+  assert(L.whyText(at19, L.categoryById('attractions')).indexOf('Few reviews, so it is listed after better-reviewed places.') > -1);
+  assert(L.whyText(at20, L.categoryById('attractions')).indexOf('Few reviews') === -1);
+});
+t('thin reviews: pubs with few reviews are untouched', () => {
+  const r = L.rank([mk('new', 'The New Micropub', { rating: 5, userRatingCount: 3 })], ctx('pub'))[0];
+  assert.strictEqual(r.thin, false);
+  assert(L.whyText(r, L.categoryById('pub')).indexOf('Few reviews') === -1);
+});
+
 t('profile: defaults, and anything unreadable becomes the default', () => {
   const d = L.defaultProfile();
   assert.deepStrictEqual(d, { party: 'family', kids: [], vegetarian: false, avoidChains: false, outside: false, budget: 0, love: [], skip: [] });
